@@ -1,0 +1,22 @@
+# Gradle
+.gradle/
+build/
+
+# IntelliJ
+.idea/
+*.iml
+out/
+
+# Forge
+run/
+
+# Eclipse
+bin/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
