@@ -1,4 +1,4 @@
-package com.emiforest.model;
+package com.emiforest.manager;
 import dev.emi.emi.bom.MaterialTree;
 
 import java.util.UUID;
@@ -6,9 +6,7 @@ import java.util.UUID;
 public class ForestProject {
 
     private final UUID id;
-
     private String name;
-
     private MaterialTree tree;
 
     public ForestProject(UUID id, String name, MaterialTree tree) {

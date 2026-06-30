@@ -1,10 +1,11 @@
 package com.emiforest.manager;
-import com.emiforest.model.ForestProject;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class ForestManager {
+public class ForestWorkspace {
+
     private final List<ForestProject> projects = new ArrayList<>();
+    private ForestProject activeProject;
 
 }
