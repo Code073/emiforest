@@ -58,7 +58,7 @@
    ```bash
    git clone https://github.com/Code073/emiforest.git
 
-   ## 🧰 Dependencies
+## 🧰 Dependencies
 
 - **Minecraft Forge** 1.20.1 (47.x or compatible)
 - **EMI** (version 1.1.22+ for 1.20.1)
