@@ -20,64 +20,95 @@ import java.util.List;
 public abstract class BoMScreenMixin {
 
     // ---------- Configuración del panel ----------
+    @Unique
     private static final int PANEL_X = 10;
+    @Unique
     private static final int PANEL_Y = 10;
+    @Unique
     private static final int PANEL_WIDTH = 168;
+    @Unique
     private static final int ROW_HEIGHT = 13;
+    @Unique
     private static final int MAX_VISIBLE_ROWS = 8;
+    @Unique
     private static final int HEADER_HEIGHT = 16;
+    @Unique
     private static final int COLLAPSED_HEIGHT = HEADER_HEIGHT;
+    @Unique
     private static final int BUTTON_HEIGHT = 15;
+    @Unique
     private static final int SCROLLBAR_W = 3;
 
     // ---------- Paleta "Forest" ----------
+    @Unique
     private static final int C_BG_TOP        = new Color(16, 22, 18, 235).getRGB();
+    @Unique
     private static final int C_BG_BOTTOM     = new Color(12, 16, 14, 235).getRGB();
+    @Unique
     private static final int C_BORDER        = new Color(58, 92, 62, 255).getRGB();
+    @Unique
     private static final int C_BORDER_SOFT   = new Color(40, 60, 42, 200).getRGB();
+    @Unique
     private static final int C_HEADER_BG     = new Color(24, 34, 26, 255).getRGB();
+    @Unique
     private static final int C_HEADER_BG_HOVER = new Color(30, 42, 32, 255).getRGB();
+    @Unique
     private static final int C_HEADER_ACCENT = new Color(97, 191, 105, 255).getRGB();
+    @Unique
     private static final int C_HEADER_TEXT   = new Color(210, 230, 210, 255).getRGB();
+    @Unique
     private static final int C_ROW_HOVER     = new Color(255, 255, 255, 18).getRGB();
+    @Unique
     private static final int C_ROW_SELECTED_BG = new Color(48, 94, 56, 160).getRGB();
+    @Unique
     private static final int C_TEXT_NORMAL   = new Color(196, 206, 198, 255).getRGB();
+    @Unique
     private static final int C_TEXT_SELECTED = new Color(148, 224, 150, 255).getRGB();
+    @Unique
     private static final int C_TEXT_MUTED    = new Color(130, 140, 132, 255).getRGB();
+    @Unique
     private static final int C_EDIT_BG       = new Color(70, 66, 30, 210).getRGB();
+    @Unique
     private static final int C_EDIT_BORDER   = new Color(214, 189, 60, 255).getRGB();
+    @Unique
     private static final int C_EDIT_TEXT     = new Color(255, 224, 120, 255).getRGB();
+    @Unique
     private static final int C_SCROLL_TRACK  = new Color(255, 255, 255, 14).getRGB();
+    @Unique
     private static final int C_SCROLL_THUMB  = new Color(120, 180, 124, 220).getRGB();
+    @Unique
     private static final int C_DELETE_BG     = new Color(120, 34, 34, 210).getRGB();
+    @Unique
     private static final int C_DELETE_BG_HOVER = new Color(158, 44, 44, 230).getRGB();
+    @Unique
     private static final int C_DELETE_BORDER = new Color(200, 90, 90, 255).getRGB();
+    @Unique
     private static final int C_TEXT_ON_DANGER = new Color(255, 235, 235, 255).getRGB();
 
     // ---------- Estado interno ----------
     @Unique
-    private boolean isCollapsed = false;
+    private boolean emiforest$isCollapsed = false;
     @Unique
-    private int scrollOffset = 0;
+    private int emiforest$scrollOffset = 0;
     @Unique
-    private boolean isEditing = false;
+    private boolean emiforest$isEditing = false;
     @Unique
-    private int editingTreeIndex = -1;
+    private int emiforest$editingTreeIndex = -1;
     @Unique
-    private String editingText = "";
+    private String emiforest$editingText = "";
 
     // ==================== RENDERIZADO ====================
     @Inject(method = "render", at = @At("TAIL"))
     private void renderForestOverlay(GuiGraphics graphics, int mouseX, int mouseY, float delta, CallbackInfo ci) {
         List<dev.emi.emi.bom.MaterialTree> trees = ForestManager.getTrees();
         if (trees.isEmpty()) {
-            scrollOffset = 0;
+            emiforest$scrollOffset = 0;
             return;
         }
 
         Font font = ((BoMScreen) (Object) this).getMinecraft().font;
 
-        if (isCollapsed) {
+        if (emiforest$isCollapsed) {
             drawPanelBackground(graphics, PANEL_X, PANEL_Y, PANEL_WIDTH, COLLAPSED_HEIGHT);
             drawHeader(graphics, font, mouseX, mouseY, PANEL_X, PANEL_Y, PANEL_WIDTH,
                     Component.translatable("emi_forest.gui.panel_title"),
@@ -88,10 +119,10 @@ public abstract class BoMScreenMixin {
         // --- Panel expandido ---
         int totalRows = trees.size();
         int maxOffset = Math.max(0, totalRows - MAX_VISIBLE_ROWS);
-        if (scrollOffset > maxOffset) scrollOffset = maxOffset;
-        if (scrollOffset < 0) scrollOffset = 0;
+        if (emiforest$scrollOffset > maxOffset) emiforest$scrollOffset = maxOffset;
+        if (emiforest$scrollOffset < 0) emiforest$scrollOffset = 0;
 
-        int visibleRows = Math.min(MAX_VISIBLE_ROWS, totalRows - scrollOffset);
+        int visibleRows = Math.min(MAX_VISIBLE_ROWS, totalRows - emiforest$scrollOffset);
         int panelHeight = HEADER_HEIGHT + visibleRows * ROW_HEIGHT + BUTTON_HEIGHT + 6;
 
         drawPanelBackground(graphics, PANEL_X, PANEL_Y, PANEL_WIDTH, panelHeight);
@@ -103,13 +134,13 @@ public abstract class BoMScreenMixin {
         int rowsTop = PANEL_Y + HEADER_HEIGHT;
 
         for (int i = 0; i < visibleRows; i++) {
-            int treeIndex = scrollOffset + i;
+            int treeIndex = emiforest$scrollOffset + i;
             int y = rowsTop + i * ROW_HEIGHT;
             boolean hovered = mouseX >= PANEL_X + 2 && mouseX <= PANEL_X + PANEL_WIDTH - 2
                     && mouseY >= y && mouseY < y + ROW_HEIGHT;
 
-            if (isEditing && treeIndex == editingTreeIndex) {
-                String display = editingText + (System.currentTimeMillis() % 1000 > 500 ? "_" : "");
+            if (emiforest$isEditing && treeIndex == emiforest$editingTreeIndex) {
+                String display = emiforest$editingText + (System.currentTimeMillis() % 1000 > 500 ? "_" : "");
                 graphics.fill(PANEL_X + 3, y + 1, PANEL_X + PANEL_WIDTH - 3, y + ROW_HEIGHT - 1, C_EDIT_BG);
                 drawBorder(graphics, PANEL_X + 3, y + 1, PANEL_WIDTH - 6, ROW_HEIGHT - 2, C_EDIT_BORDER);
                 graphics.drawString(font, Component.literal(display), PANEL_X + 8, y + 3, C_EDIT_TEXT);
@@ -140,7 +171,7 @@ public abstract class BoMScreenMixin {
             int scrollbarY = rowsTop;
             int scrollbarH = visibleRows * ROW_HEIGHT;
             graphics.fill(scrollbarX, scrollbarY, scrollbarX + SCROLLBAR_W, scrollbarY + scrollbarH, C_SCROLL_TRACK);
-            float ratio = maxOffset == 0 ? 0 : (float) scrollOffset / maxOffset;
+            float ratio = maxOffset == 0 ? 0 : (float) emiforest$scrollOffset / maxOffset;
             int thumbH = Math.max(8, scrollbarH * MAX_VISIBLE_ROWS / totalRows);
             int thumbY = scrollbarY + (int) ((scrollbarH - thumbH) * ratio);
             graphics.fill(scrollbarX, thumbY, scrollbarX + SCROLLBAR_W, thumbY + thumbH, C_SCROLL_THUMB);
@@ -200,21 +231,21 @@ public abstract class BoMScreenMixin {
     private void onMouseClicked(double mouseX, double mouseY, int button, CallbackInfoReturnable<Boolean> cir) {
         List<dev.emi.emi.bom.MaterialTree> trees = ForestManager.getTrees();
         if (trees.isEmpty()) {
-            if (isEditing) cancelEditing();
+            if (emiforest$isEditing) cancelEditing();
             return;
         }
 
         int panelHeight;
-        if (isCollapsed) {
+        if (emiforest$isCollapsed) {
             panelHeight = COLLAPSED_HEIGHT;
         } else {
-            int visibleRows = Math.min(MAX_VISIBLE_ROWS, trees.size() - scrollOffset);
+            int visibleRows = Math.min(MAX_VISIBLE_ROWS, trees.size() - emiforest$scrollOffset);
             panelHeight = HEADER_HEIGHT + visibleRows * ROW_HEIGHT + BUTTON_HEIGHT + 6;
         }
 
         if (mouseX < PANEL_X || mouseX > PANEL_X + PANEL_WIDTH ||
                 mouseY < PANEL_Y || mouseY > PANEL_Y + panelHeight) {
-            if (isEditing) {
+            if (emiforest$isEditing) {
                 cancelEditing();
                 cir.setReturnValue(true);
             }
@@ -222,26 +253,26 @@ public abstract class BoMScreenMixin {
         }
 
         if (mouseY >= PANEL_Y && mouseY <= PANEL_Y + HEADER_HEIGHT) {
-            isCollapsed = !isCollapsed;
-            if (isEditing) cancelEditing();
+            emiforest$isCollapsed = !emiforest$isCollapsed;
+            if (emiforest$isEditing) cancelEditing();
             cir.setReturnValue(true);
             return;
         }
 
-        if (isCollapsed) {
+        if (emiforest$isCollapsed) {
             cir.setReturnValue(true);
             return;
         }
 
-        int visibleRows = Math.min(MAX_VISIBLE_ROWS, trees.size() - scrollOffset);
+        int visibleRows = Math.min(MAX_VISIBLE_ROWS, trees.size() - emiforest$scrollOffset);
         if (mouseY >= PANEL_Y + HEADER_HEIGHT && mouseY <= PANEL_Y + HEADER_HEIGHT + visibleRows * ROW_HEIGHT) {
             int relY = (int) mouseY - (PANEL_Y + HEADER_HEIGHT);
             int row = relY / ROW_HEIGHT;
             if (row >= 0 && row < visibleRows) {
-                int treeIndex = scrollOffset + row;
+                int treeIndex = emiforest$scrollOffset + row;
 
                 if (button == 1) {
-                    if (isEditing && editingTreeIndex != treeIndex) {
+                    if (emiforest$isEditing && emiforest$editingTreeIndex != treeIndex) {
                         applyEditing();
                     }
                     startEditing(treeIndex);
@@ -250,7 +281,7 @@ public abstract class BoMScreenMixin {
                 }
 
                 if (button == 0) {
-                    if (isEditing) {
+                    if (emiforest$isEditing) {
                         applyEditing();
                     }
                     ForestManager.select(treeIndex);
@@ -265,7 +296,7 @@ public abstract class BoMScreenMixin {
         if (mouseY >= buttonY && mouseY <= buttonY + BUTTON_HEIGHT &&
                 mouseX >= PANEL_X + 5 && mouseX <= PANEL_X + PANEL_WIDTH - 5) {
             ForestManager.deleteAll();
-            if (isEditing) cancelEditing();
+            if (emiforest$isEditing) cancelEditing();
             cir.setReturnValue(true);
             return;
         }
@@ -276,19 +307,19 @@ public abstract class BoMScreenMixin {
     @Inject(method = "mouseScrolled", at = @At("HEAD"), cancellable = true)
     private void onMouseScrolled(double mouseX, double mouseY, double delta, CallbackInfoReturnable<Boolean> cir) {
         List<dev.emi.emi.bom.MaterialTree> trees = ForestManager.getTrees();
-        if (trees.isEmpty() || isCollapsed) return;
+        if (trees.isEmpty() || emiforest$isCollapsed) return;
 
         int totalRows = trees.size();
         int maxOffset = Math.max(0, totalRows - MAX_VISIBLE_ROWS);
         if (maxOffset == 0) return;
 
-        int visibleRows = Math.min(MAX_VISIBLE_ROWS, totalRows - scrollOffset);
+        int visibleRows = Math.min(MAX_VISIBLE_ROWS, totalRows - emiforest$scrollOffset);
         int panelHeight = HEADER_HEIGHT + visibleRows * ROW_HEIGHT + BUTTON_HEIGHT + 6;
 
         if (mouseX >= PANEL_X && mouseX <= PANEL_X + PANEL_WIDTH &&
                 mouseY >= PANEL_Y && mouseY <= PANEL_Y + panelHeight) {
-            scrollOffset -= (int) delta;
-            scrollOffset = Math.max(0, Math.min(scrollOffset, maxOffset));
+            emiforest$scrollOffset -= (int) delta;
+            emiforest$scrollOffset = Math.max(0, Math.min(emiforest$scrollOffset, maxOffset));
             cir.setReturnValue(true);
         }
     }
@@ -296,7 +327,7 @@ public abstract class BoMScreenMixin {
     // ==================== TECLADO (para edición) ====================
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
     private void onKeyPressed(int keyCode, int scanCode, int modifiers, CallbackInfoReturnable<Boolean> cir) {
-        if (!isEditing) return;
+        if (!emiforest$isEditing) return;
 
         if (keyCode == GLFW.GLFW_KEY_ENTER) {
             applyEditing();
@@ -309,8 +340,8 @@ public abstract class BoMScreenMixin {
             return;
         }
         if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
-            if (!editingText.isEmpty()) {
-                editingText = editingText.substring(0, editingText.length() - 1);
+            if (!emiforest$editingText.isEmpty()) {
+                emiforest$editingText = emiforest$editingText.substring(0, emiforest$editingText.length() - 1);
             }
             cir.setReturnValue(true);
             return;
@@ -319,8 +350,8 @@ public abstract class BoMScreenMixin {
         // Solo Shift, sin Caps Lock
         char typedChar = keyCodeToChar(keyCode, modifiers);
         if (typedChar != 0) {
-            if (editingText.length() < 30) {
-                editingText += typedChar;
+            if (emiforest$editingText.length() < 30) {
+                emiforest$editingText += typedChar;
             }
             cir.setReturnValue(true);
         }
@@ -372,29 +403,29 @@ public abstract class BoMScreenMixin {
     // ==================== Métodos auxiliares de edición ====================
     @Unique
     private void startEditing(int treeIndex) {
-        isEditing = true;
-        editingTreeIndex = treeIndex;
-        editingText = ForestManager.getDisplayName(treeIndex);
+        emiforest$isEditing = true;
+        emiforest$editingTreeIndex = treeIndex;
+        emiforest$editingText = ForestManager.getDisplayName(treeIndex);
     }
 
     @Unique
     private void applyEditing() {
-        if (!isEditing) return;
-        String trimmed = editingText.trim();
+        if (!emiforest$isEditing) return;
+        String trimmed = emiforest$editingText.trim();
         if (!trimmed.isEmpty()) {
-            ForestManager.setCustomName(editingTreeIndex, trimmed);
+            ForestManager.setCustomName(emiforest$editingTreeIndex, trimmed);
         } else {
-            ForestManager.setCustomName(editingTreeIndex, null);
+            ForestManager.setCustomName(emiforest$editingTreeIndex, null);
         }
-        isEditing = false;
-        editingTreeIndex = -1;
-        editingText = "";
+        emiforest$isEditing = false;
+        emiforest$editingTreeIndex = -1;
+        emiforest$editingText = "";
     }
 
     @Unique
     private void cancelEditing() {
-        isEditing = false;
-        editingTreeIndex = -1;
-        editingText = "";
+        emiforest$isEditing = false;
+        emiforest$editingTreeIndex = -1;
+        emiforest$editingText = "";
     }
 }
