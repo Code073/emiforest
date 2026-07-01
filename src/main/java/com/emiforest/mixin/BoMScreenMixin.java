@@ -22,12 +22,37 @@ public abstract class BoMScreenMixin {
     // ---------- Configuración del panel ----------
     private static final int PANEL_X = 10;
     private static final int PANEL_Y = 10;
-    private static final int PANEL_WIDTH = 160;
-    private static final int ROW_HEIGHT = 12;
+    private static final int PANEL_WIDTH = 168;
+    private static final int ROW_HEIGHT = 13;
     private static final int MAX_VISIBLE_ROWS = 8;
-    private static final int HEADER_HEIGHT = 14;
-    private static final int COLLAPSED_HEIGHT = HEADER_HEIGHT + 4;
-    private static final int BUTTON_HEIGHT = 14;  // altura del botón "Eliminar todos"
+    private static final int HEADER_HEIGHT = 16;
+    private static final int COLLAPSED_HEIGHT = HEADER_HEIGHT;
+    private static final int BUTTON_HEIGHT = 15;
+    private static final int SCROLLBAR_W = 3;
+
+    // ---------- Paleta "Forest" ----------
+    private static final int C_BG_TOP        = new Color(16, 22, 18, 235).getRGB();
+    private static final int C_BG_BOTTOM     = new Color(12, 16, 14, 235).getRGB();
+    private static final int C_BORDER        = new Color(58, 92, 62, 255).getRGB();
+    private static final int C_BORDER_SOFT   = new Color(40, 60, 42, 200).getRGB();
+    private static final int C_HEADER_BG     = new Color(24, 34, 26, 255).getRGB();
+    private static final int C_HEADER_BG_HOVER = new Color(30, 42, 32, 255).getRGB();
+    private static final int C_HEADER_ACCENT = new Color(97, 191, 105, 255).getRGB();
+    private static final int C_HEADER_TEXT   = new Color(210, 230, 210, 255).getRGB();
+    private static final int C_ROW_HOVER     = new Color(255, 255, 255, 18).getRGB();
+    private static final int C_ROW_SELECTED_BG = new Color(48, 94, 56, 160).getRGB();
+    private static final int C_TEXT_NORMAL   = new Color(196, 206, 198, 255).getRGB();
+    private static final int C_TEXT_SELECTED = new Color(148, 224, 150, 255).getRGB();
+    private static final int C_TEXT_MUTED    = new Color(130, 140, 132, 255).getRGB();
+    private static final int C_EDIT_BG       = new Color(70, 66, 30, 210).getRGB();
+    private static final int C_EDIT_BORDER   = new Color(214, 189, 60, 255).getRGB();
+    private static final int C_EDIT_TEXT     = new Color(255, 224, 120, 255).getRGB();
+    private static final int C_SCROLL_TRACK  = new Color(255, 255, 255, 14).getRGB();
+    private static final int C_SCROLL_THUMB  = new Color(120, 180, 124, 220).getRGB();
+    private static final int C_DELETE_BG     = new Color(120, 34, 34, 210).getRGB();
+    private static final int C_DELETE_BG_HOVER = new Color(158, 44, 44, 230).getRGB();
+    private static final int C_DELETE_BORDER = new Color(200, 90, 90, 255).getRGB();
+    private static final int C_TEXT_ON_DANGER = new Color(255, 235, 235, 255).getRGB();
 
     // ---------- Estado interno ----------
     @Unique
@@ -53,13 +78,10 @@ public abstract class BoMScreenMixin {
         Font font = ((BoMScreen) (Object) this).getMinecraft().font;
 
         if (isCollapsed) {
-            // Panel colapsado
-            graphics.fill(PANEL_X, PANEL_Y, PANEL_X + PANEL_WIDTH, PANEL_Y + COLLAPSED_HEIGHT,
-                    new Color(30, 30, 30, 200).getRGB());
-            Component title = Component.translatable("emi_forest.gui.panel_title");
-            Component expand = Component.translatable("emi_forest.gui.expand");
-            Component text = title.copy().append(" ").append(expand);
-            graphics.drawString(font, text, PANEL_X + 5, PANEL_Y + 3, Color.WHITE.getRGB());
+            drawPanelBackground(graphics, PANEL_X, PANEL_Y, PANEL_WIDTH, COLLAPSED_HEIGHT);
+            drawHeader(graphics, font, mouseX, mouseY, PANEL_X, PANEL_Y, PANEL_WIDTH,
+                    Component.translatable("emi_forest.gui.panel_title"),
+                    "\u25B8", trees.size());
             return;
         }
 
@@ -70,68 +92,107 @@ public abstract class BoMScreenMixin {
         if (scrollOffset < 0) scrollOffset = 0;
 
         int visibleRows = Math.min(MAX_VISIBLE_ROWS, totalRows - scrollOffset);
-        // Altura total = título + filas visibles + botón (siempre) + un poco de margen
-        int panelHeight = HEADER_HEIGHT + visibleRows * ROW_HEIGHT + BUTTON_HEIGHT + 4;
+        int panelHeight = HEADER_HEIGHT + visibleRows * ROW_HEIGHT + BUTTON_HEIGHT + 6;
 
-        // Fondo
-        graphics.fill(PANEL_X, PANEL_Y, PANEL_X + PANEL_WIDTH, PANEL_Y + panelHeight,
-                new Color(20, 20, 20, 210).getRGB());
-
-        // Título con [ - ]
-        Component title = Component.translatable("emi_forest.gui.panel_title");
-        Component collapse = Component.translatable("emi_forest.gui.collapse");
-        Component headerText = title.copy().append(" ").append(collapse);
-        graphics.drawString(font, headerText, PANEL_X + 5, PANEL_Y + 2, Color.LIGHT_GRAY.getRGB());
+        drawPanelBackground(graphics, PANEL_X, PANEL_Y, PANEL_WIDTH, panelHeight);
+        drawHeader(graphics, font, mouseX, mouseY, PANEL_X, PANEL_Y, PANEL_WIDTH,
+                Component.translatable("emi_forest.gui.panel_title"),
+                "\u25BE", trees.size());
 
         int current = ForestManager.getCurrentIndex();
+        int rowsTop = PANEL_Y + HEADER_HEIGHT;
+
         for (int i = 0; i < visibleRows; i++) {
             int treeIndex = scrollOffset + i;
+            int y = rowsTop + i * ROW_HEIGHT;
+            boolean hovered = mouseX >= PANEL_X + 2 && mouseX <= PANEL_X + PANEL_WIDTH - 2
+                    && mouseY >= y && mouseY < y + ROW_HEIGHT;
 
             if (isEditing && treeIndex == editingTreeIndex) {
-                // Modo edición
-                String display = editingText + (System.currentTimeMillis() % 1000 > 500 ? "|" : "");
-                int color = Color.YELLOW.getRGB();
-                int y = PANEL_Y + HEADER_HEIGHT + i * ROW_HEIGHT;
-                graphics.fill(PANEL_X + 4, y, PANEL_X + PANEL_WIDTH - 4, y + ROW_HEIGHT,
-                        new Color(50, 50, 50, 200).getRGB());
-                graphics.drawString(font, Component.literal(display), PANEL_X + 6, y + 2, color);
+                String display = editingText + (System.currentTimeMillis() % 1000 > 500 ? "_" : "");
+                graphics.fill(PANEL_X + 3, y + 1, PANEL_X + PANEL_WIDTH - 3, y + ROW_HEIGHT - 1, C_EDIT_BG);
+                drawBorder(graphics, PANEL_X + 3, y + 1, PANEL_WIDTH - 6, ROW_HEIGHT - 2, C_EDIT_BORDER);
+                graphics.drawString(font, Component.literal(display), PANEL_X + 8, y + 3, C_EDIT_TEXT);
                 continue;
             }
 
-            // Nombre normal
+            boolean selected = treeIndex == current;
+            if (selected) {
+                graphics.fill(PANEL_X + 3, y + 1, PANEL_X + PANEL_WIDTH - 3, y + ROW_HEIGHT - 1, C_ROW_SELECTED_BG);
+            } else if (hovered) {
+                graphics.fill(PANEL_X + 3, y + 1, PANEL_X + PANEL_WIDTH - 3, y + ROW_HEIGHT - 1, C_ROW_HOVER);
+            }
+
             String name = ForestManager.getDisplayName(treeIndex);
-            String prefix = (treeIndex == current) ? "> " : "  ";
-            Component line = Component.literal(prefix + name);
-            int color = (treeIndex == current) ? Color.GREEN.getRGB() : Color.LIGHT_GRAY.getRGB();
-            int y = PANEL_Y + HEADER_HEIGHT + i * ROW_HEIGHT;
-            graphics.drawString(font, line, PANEL_X + 5, y + 2, color);
+            String marker = selected ? "\u25CF" : " ";
+            Component line = Component.literal(marker + " " + name);
+            int color = selected ? C_TEXT_SELECTED : C_TEXT_NORMAL;
+            graphics.drawString(font, line, PANEL_X + 8, y + 3, color);
         }
+
+        // Separador entre filas y botón
+        graphics.fill(PANEL_X + 3, rowsTop + visibleRows * ROW_HEIGHT, PANEL_X + PANEL_WIDTH - 3,
+                rowsTop + visibleRows * ROW_HEIGHT + 1, C_BORDER_SOFT);
 
         // Scrollbar
         if (totalRows > MAX_VISIBLE_ROWS) {
-            int scrollbarX = PANEL_X + PANEL_WIDTH - 5;
-            int scrollbarY = PANEL_Y + HEADER_HEIGHT;
+            int scrollbarX = PANEL_X + PANEL_WIDTH - SCROLLBAR_W - 3;
+            int scrollbarY = rowsTop;
             int scrollbarH = visibleRows * ROW_HEIGHT;
-            graphics.fill(scrollbarX, scrollbarY, scrollbarX + 3, scrollbarY + scrollbarH,
-                    new Color(100, 100, 100, 200).getRGB());
-            float ratio = (float) scrollOffset / maxOffset;
-            int thumbH = Math.max(6, scrollbarH * MAX_VISIBLE_ROWS / totalRows);
+            graphics.fill(scrollbarX, scrollbarY, scrollbarX + SCROLLBAR_W, scrollbarY + scrollbarH, C_SCROLL_TRACK);
+            float ratio = maxOffset == 0 ? 0 : (float) scrollOffset / maxOffset;
+            int thumbH = Math.max(8, scrollbarH * MAX_VISIBLE_ROWS / totalRows);
             int thumbY = scrollbarY + (int) ((scrollbarH - thumbH) * ratio);
-            graphics.fill(scrollbarX, thumbY, scrollbarX + 3, thumbY + thumbH, Color.WHITE.getRGB());
+            graphics.fill(scrollbarX, thumbY, scrollbarX + SCROLLBAR_W, thumbY + thumbH, C_SCROLL_THUMB);
         }
 
         // --- Botón "Eliminar todos" ---
         int buttonX = PANEL_X + 5;
-        int buttonY = PANEL_Y + HEADER_HEIGHT + visibleRows * ROW_HEIGHT + 2;
+        int buttonY = rowsTop + visibleRows * ROW_HEIGHT + 4;
         int buttonWidth = PANEL_WIDTH - 10;
-        // Fondo rojo oscuro
+        boolean buttonHovered = mouseX >= buttonX && mouseX <= buttonX + buttonWidth
+                && mouseY >= buttonY && mouseY <= buttonY + BUTTON_HEIGHT;
+
         graphics.fill(buttonX, buttonY, buttonX + buttonWidth, buttonY + BUTTON_HEIGHT,
-                new Color(180, 40, 40, 200).getRGB());
+                buttonHovered ? C_DELETE_BG_HOVER : C_DELETE_BG);
+        drawBorder(graphics, buttonX, buttonY, buttonWidth, BUTTON_HEIGHT, C_DELETE_BORDER);
 
         String buttonText = Component.translatable("emi_forest.gui.delete_all").getString();
         int textWidth = font.width(buttonText);
         graphics.drawString(font, Component.literal(buttonText),
-                buttonX + (buttonWidth - textWidth) / 2, buttonY + 3, Color.WHITE.getRGB());
+                buttonX + (buttonWidth - textWidth) / 2, buttonY + (BUTTON_HEIGHT - 8) / 2, C_TEXT_ON_DANGER);
+    }
+
+    // ---------- Helpers visuales ----------
+    @Unique
+    private void drawPanelBackground(GuiGraphics graphics, int x, int y, int w, int h) {
+        int mid = y + h / 2;
+        graphics.fill(x, y, x + w, mid, C_BG_TOP);
+        graphics.fill(x, mid, x + w, y + h, C_BG_BOTTOM);
+        drawBorder(graphics, x, y, w, h, C_BORDER);
+    }
+
+    @Unique
+    private void drawBorder(GuiGraphics graphics, int x, int y, int w, int h, int color) {
+        graphics.fill(x, y, x + w, y + 1, color);
+        graphics.fill(x, y + h - 1, x + w, y + h, color);
+        graphics.fill(x, y, x + 1, y + h, color);
+        graphics.fill(x + w - 1, y, x + w, y + h, color);
+    }
+
+    @Unique
+    private void drawHeader(GuiGraphics graphics, Font font, int mouseX, int mouseY,
+                            int x, int y, int w, Component title, String arrow, int count) {
+        boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + HEADER_HEIGHT;
+        graphics.fill(x, y, x + w, y + HEADER_HEIGHT, hovered ? C_HEADER_BG_HOVER : C_HEADER_BG);
+        graphics.fill(x, y + HEADER_HEIGHT - 1, x + w, y + HEADER_HEIGHT, C_HEADER_ACCENT);
+
+        Component text = title.copy()
+                .append(Component.literal("  (" + count + ")").withStyle(s -> s.withColor(0x8FA890)));
+        graphics.drawString(font, text, x + 6, y + 4, C_HEADER_TEXT);
+
+        int arrowWidth = font.width(arrow);
+        graphics.drawString(font, Component.literal(arrow), x + w - arrowWidth - 6, y + 4, C_HEADER_ACCENT);
     }
 
     // ==================== EVENTOS DE RATÓN ====================
@@ -139,7 +200,6 @@ public abstract class BoMScreenMixin {
     private void onMouseClicked(double mouseX, double mouseY, int button, CallbackInfoReturnable<Boolean> cir) {
         List<dev.emi.emi.bom.MaterialTree> trees = ForestManager.getTrees();
         if (trees.isEmpty()) {
-            // Si estábamos editando, cancelar
             if (isEditing) cancelEditing();
             return;
         }
@@ -149,10 +209,9 @@ public abstract class BoMScreenMixin {
             panelHeight = COLLAPSED_HEIGHT;
         } else {
             int visibleRows = Math.min(MAX_VISIBLE_ROWS, trees.size() - scrollOffset);
-            panelHeight = HEADER_HEIGHT + visibleRows * ROW_HEIGHT + BUTTON_HEIGHT + 4;
+            panelHeight = HEADER_HEIGHT + visibleRows * ROW_HEIGHT + BUTTON_HEIGHT + 6;
         }
 
-        // Si clic fuera del panel, cancelamos edición si la hay
         if (mouseX < PANEL_X || mouseX > PANEL_X + PANEL_WIDTH ||
                 mouseY < PANEL_Y || mouseY > PANEL_Y + panelHeight) {
             if (isEditing) {
@@ -162,7 +221,6 @@ public abstract class BoMScreenMixin {
             return;
         }
 
-        // Clic en la barra de título -> colapsar/expandir
         if (mouseY >= PANEL_Y && mouseY <= PANEL_Y + HEADER_HEIGHT) {
             isCollapsed = !isCollapsed;
             if (isEditing) cancelEditing();
@@ -170,13 +228,11 @@ public abstract class BoMScreenMixin {
             return;
         }
 
-        // Si está colapsado, no hay más zonas activas
         if (isCollapsed) {
             cir.setReturnValue(true);
             return;
         }
 
-        // Zona de filas (debajo del título)
         int visibleRows = Math.min(MAX_VISIBLE_ROWS, trees.size() - scrollOffset);
         if (mouseY >= PANEL_Y + HEADER_HEIGHT && mouseY <= PANEL_Y + HEADER_HEIGHT + visibleRows * ROW_HEIGHT) {
             int relY = (int) mouseY - (PANEL_Y + HEADER_HEIGHT);
@@ -184,7 +240,7 @@ public abstract class BoMScreenMixin {
             if (row >= 0 && row < visibleRows) {
                 int treeIndex = scrollOffset + row;
 
-                if (button == 1) { // botón derecho: editar
+                if (button == 1) {
                     if (isEditing && editingTreeIndex != treeIndex) {
                         applyEditing();
                     }
@@ -193,7 +249,7 @@ public abstract class BoMScreenMixin {
                     return;
                 }
 
-                if (button == 0) { // botón izquierdo: seleccionar
+                if (button == 0) {
                     if (isEditing) {
                         applyEditing();
                     }
@@ -205,8 +261,7 @@ public abstract class BoMScreenMixin {
             }
         }
 
-        // Botón "Eliminar todos"
-        int buttonY = PANEL_Y + HEADER_HEIGHT + visibleRows * ROW_HEIGHT + 2;
+        int buttonY = PANEL_Y + HEADER_HEIGHT + visibleRows * ROW_HEIGHT + 4;
         if (mouseY >= buttonY && mouseY <= buttonY + BUTTON_HEIGHT &&
                 mouseX >= PANEL_X + 5 && mouseX <= PANEL_X + PANEL_WIDTH - 5) {
             ForestManager.deleteAll();
@@ -215,7 +270,6 @@ public abstract class BoMScreenMixin {
             return;
         }
 
-        // Cualquier otro clic en el panel lo consumimos
         cir.setReturnValue(true);
     }
 
@@ -229,7 +283,7 @@ public abstract class BoMScreenMixin {
         if (maxOffset == 0) return;
 
         int visibleRows = Math.min(MAX_VISIBLE_ROWS, totalRows - scrollOffset);
-        int panelHeight = HEADER_HEIGHT + visibleRows * ROW_HEIGHT + BUTTON_HEIGHT + 4;
+        int panelHeight = HEADER_HEIGHT + visibleRows * ROW_HEIGHT + BUTTON_HEIGHT + 6;
 
         if (mouseX >= PANEL_X && mouseX <= PANEL_X + PANEL_WIDTH &&
                 mouseY >= PANEL_Y && mouseY <= PANEL_Y + panelHeight) {
@@ -244,7 +298,6 @@ public abstract class BoMScreenMixin {
     private void onKeyPressed(int keyCode, int scanCode, int modifiers, CallbackInfoReturnable<Boolean> cir) {
         if (!isEditing) return;
 
-        // Teclas de control
         if (keyCode == GLFW.GLFW_KEY_ENTER) {
             applyEditing();
             cir.setReturnValue(true);
@@ -263,7 +316,7 @@ public abstract class BoMScreenMixin {
             return;
         }
 
-        // Mapeo de teclas a caracteres
+        // Solo Shift, sin Caps Lock
         char typedChar = keyCodeToChar(keyCode, modifiers);
         if (typedChar != 0) {
             if (editingText.length() < 30) {
@@ -277,7 +330,7 @@ public abstract class BoMScreenMixin {
     private static char keyCodeToChar(int keyCode, int modifiers) {
         boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
 
-        // Letras
+        // Letras: Shift = mayúsculas
         if (keyCode >= GLFW.GLFW_KEY_A && keyCode <= GLFW.GLFW_KEY_Z) {
             char base = (char) ('A' + (keyCode - GLFW.GLFW_KEY_A));
             return shift ? base : Character.toLowerCase(base);
@@ -304,7 +357,7 @@ public abstract class BoMScreenMixin {
             }
         }
 
-        // Teclas especiales
+        // Otros caracteres
         return switch (keyCode) {
             case GLFW.GLFW_KEY_SPACE -> ' ';
             case GLFW.GLFW_KEY_MINUS -> shift ? '_' : '-';
