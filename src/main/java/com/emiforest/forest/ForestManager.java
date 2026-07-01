@@ -5,6 +5,7 @@ import dev.emi.emi.bom.MaterialNode;
 import dev.emi.emi.bom.MaterialTree;
 import dev.emi.emi.screen.BoMScreen;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,10 +15,13 @@ public class ForestManager {
     private static final List<MaterialTree> TREES = new ArrayList<>();
 
     private static int currentIndex = -1;
+    private static final List<String> CUSTOM_NAMES = new ArrayList<>();
+
 
     public static void addTree(MaterialTree tree) {
 
         TREES.add(tree);
+        CUSTOM_NAMES.add(null);
         currentIndex = TREES.size() - 1;
 
         System.out.println("========================================");
@@ -46,6 +50,18 @@ public class ForestManager {
         return currentIndex;
     }
 
+    public static String getDisplayName(int index) {
+        if (index < 0 || index >= TREES.size()) return "";
+        String custom = CUSTOM_NAMES.get(index);
+        return custom != null ? custom : Component.translatable("emi_forest.gui.tree_entry", index + 1).getString();
+    }
+
+    public static void setCustomName(int index, String name) {
+        if (index >= 0 && index < CUSTOM_NAMES.size()) {
+            CUSTOM_NAMES.set(index, name);
+        }
+    }
+
     public static void select(int index) {
 
         if (index < 0 || index >= TREES.size()) {
@@ -64,6 +80,7 @@ public class ForestManager {
 
         // 1. Eliminar el árbol de la lista
         TREES.remove(index);
+        CUSTOM_NAMES.remove(index);   //
 
         // 2. Ajustar el índice actual
         if (TREES.isEmpty()) {
@@ -86,7 +103,14 @@ public class ForestManager {
         printCurrent();
     }
 
-
+    public static void deleteAll() {
+        TREES.clear();
+        CUSTOM_NAMES.clear();
+        currentIndex = -1;
+        BoM.tree = null;
+        refreshBoM();
+        System.out.println("[EMI Forest] Todos los árboles han sido eliminados.");
+    }
     public static void next() {
         if (TREES.isEmpty()) return;
         select((currentIndex + 1) % TREES.size());
@@ -114,7 +138,7 @@ public class ForestManager {
         refreshBoM();
     }
 
-    private static void refreshBoM() {
+    public static void refreshBoM() {
         Minecraft client = Minecraft.getInstance();
         if (client != null && client.screen instanceof BoMScreen) {
             ((BoMScreen) client.screen).recalculateTree();

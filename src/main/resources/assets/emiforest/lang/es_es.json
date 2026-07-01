@@ -2,5 +2,12 @@
   "key.categories.emiforest": "EMI Forest",
   "key.emiforest.next_tree": "Arbol siguiente",
   "key.emiforest.previous_tree": "Arbol anterior",
-  "key.emiforest.delete_tree": "Eliminar árbol"
+  "key.emiforest.delete_tree": "Eliminar árbol",
+
+  "emi_forest.gui.panel_title": "Árboles guardados",
+  "emi_forest.gui.tree_entry": "Árbol #%d",
+  "emi_forest.gui.current_tree_marker": "> ",
+  "emi_forest.gui.collapse": "[ - ]",
+  "emi_forest.gui.expand": "[ + ]",
+  "emi_forest.gui.delete_all": "Eliminar Todos"
 }
