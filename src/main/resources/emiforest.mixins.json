@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "com.emiforest.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "emiforest.refmap.json",
+  "mixins": [
+    "BoMMixin",
+    "BoMScreenMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

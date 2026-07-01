@@ -1,39 +1,36 @@
 package com.emiforest;
 
-import com.emiforest.manager.ForestProject;
-import com.emiforest.manager.ForestWorkspace;
-import com.emiforest.manager.ForestWorkspaceManager;
+import com.emiforest.client.ModKeybinds;
+import com.emiforest.forest.ForestManager;
+import dev.emi.emi.screen.BoMScreen;
+import net.minecraft.client.Minecraft;
+import net.minecraftforge.client.event.InputEvent;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
-
-import java.util.UUID;
+import org.lwjgl.glfw.GLFW;
 
 @Mod(EmiForest.MOD_ID)
 public class EmiForest {
     public static final String MOD_ID = "emiforest";
 
     public EmiForest() {
+        MinecraftForge.EVENT_BUS.addListener(this::onKeyInput);
+    }
 
-        ForestWorkspaceManager manager = new ForestWorkspaceManager();
+    public void onKeyInput(InputEvent.Key event) {
+        if (event.getAction() != GLFW.GLFW_PRESS) return;
 
-        ForestProject project = new ForestProject(
-                UUID.randomUUID(),
-                "Steel Factory"
-        );
+        Minecraft client = Minecraft.getInstance();
+        if (client.screen == null) return;
+        if (!(client.screen instanceof BoMScreen)) return;
 
-        manager.getWorkspace().addProject(project);
-
-        ForestWorkspace workspace = manager.getWorkspace();
-
-        workspace.createProject("Steel");
-        workspace.createProject("Motors");
-        workspace.createProject("Circuits");
-        workspace.createProject("MV");
-        workspace.createProject("MV");
-        workspace.createProject("LV");
-        workspace.createProject("HV");
-        workspace.createProject("EV");
-
-        workspace.printWorkspace();
-
+        int key = event.getKey();
+        if (key == ModKeybinds.NEXT_TREE.getKey().getValue()) {
+            ForestManager.next();
+        } else if (key == ModKeybinds.PREVIOUS_TREE.getKey().getValue()) {
+            ForestManager.previous();
+        } else if (key == ModKeybinds.DELETE_TREE.getKey().getValue()) {
+            ForestManager.delTree();
+        }
     }
 }
