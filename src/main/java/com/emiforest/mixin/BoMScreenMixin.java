@@ -2,6 +2,7 @@ package com.emiforest.mixin;
 
 import com.emiforest.forest.ForestManager;
 import dev.emi.emi.screen.BoMScreen;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -99,9 +100,10 @@ public abstract class BoMScreenMixin {
     private int emiforest$editingTreeIndex = -1;
     @Unique
     private String emiforest$editingText = "";
-
     @Unique
     private boolean emiforest$capsLockOn = false;
+    @Unique
+    private boolean emiforest$isDraggingScrollbar = false;
 
 
     @Inject(method = "render", at = @At("TAIL"))
@@ -205,6 +207,13 @@ public abstract class BoMScreenMixin {
         int textWidth = font.width(buttonText);
         graphics.drawString(font, Component.literal(buttonText),
                 buttonX + (buttonWidth - textWidth) / 2, buttonY + (BUTTON_HEIGHT - 8) / 2, C_TEXT_ON_DANGER);
+
+        if (emiforest$isDraggingScrollbar) {
+            long window = Minecraft.getInstance().getWindow().getWindow();
+            if (GLFW.glfwGetMouseButton(window, GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_RELEASE) {
+                emiforest$isDraggingScrollbar = false;
+            }
+        }
     }
 
 
@@ -248,14 +257,18 @@ public abstract class BoMScreenMixin {
             return;
         }
 
+        int totalRows = trees.size();
+        int visibleRows;
         int panelHeight;
         if (emiforest$isCollapsed) {
             panelHeight = COLLAPSED_HEIGHT;
+            visibleRows = 0;
         } else {
-            int visibleRows = Math.min(MAX_VISIBLE_ROWS, trees.size() - emiforest$scrollOffset);
+            visibleRows = Math.min(MAX_VISIBLE_ROWS, totalRows - emiforest$scrollOffset);
             panelHeight = HEADER_HEIGHT + visibleRows * ROW_HEIGHT + BUTTON_HEIGHT + 6;
         }
 
+        // Click fuera del panel: guardar edición
         if (mouseX < PANEL_X || mouseX > PANEL_X + PANEL_WIDTH ||
                 mouseY < PANEL_Y || mouseY > PANEL_Y + panelHeight) {
             if (emiforest$isEditing) {
@@ -265,6 +278,7 @@ public abstract class BoMScreenMixin {
             return;
         }
 
+        // Clic en el encabezado: colapsar/expandir
         if (mouseY >= PANEL_Y && mouseY <= PANEL_Y + HEADER_HEIGHT) {
             emiforest$isCollapsed = !emiforest$isCollapsed;
             if (emiforest$isEditing) cancelEditing();
@@ -277,9 +291,33 @@ public abstract class BoMScreenMixin {
             return;
         }
 
-        int visibleRows = Math.min(MAX_VISIBLE_ROWS, trees.size() - emiforest$scrollOffset);
-        if (mouseY >= PANEL_Y + HEADER_HEIGHT && mouseY <= PANEL_Y + HEADER_HEIGHT + visibleRows * ROW_HEIGHT) {
-            int relY = (int) mouseY - (PANEL_Y + HEADER_HEIGHT);
+        int rowsTop = PANEL_Y + HEADER_HEIGHT;
+
+        // Zona de la scrollbar: iniciar arrastre / salto directo
+        if (totalRows > MAX_VISIBLE_ROWS) {
+            int scrollbarX = PANEL_X + PANEL_WIDTH - SCROLLBAR_W - 3;
+            int scrollbarH = visibleRows * ROW_HEIGHT;
+            if (mouseX >= scrollbarX - 2 && mouseX <= scrollbarX + SCROLLBAR_W + 2
+                    && mouseY >= rowsTop && mouseY <= rowsTop + scrollbarH) {
+                if (emiforest$isEditing) applyEditing();
+
+                int maxOffset = Math.max(0, totalRows - MAX_VISIBLE_ROWS);
+                int thumbH = Math.max(8, scrollbarH * MAX_VISIBLE_ROWS / totalRows);
+                int trackRange = scrollbarH - thumbH;
+                if (trackRange > 0) {
+                    float ratio = (float) (mouseY - rowsTop - thumbH / 2.0) / trackRange;
+                    ratio = Math.max(0f, Math.min(1f, ratio));
+                    emiforest$scrollOffset = Math.round(ratio * maxOffset);
+                }
+                emiforest$isDraggingScrollbar = true;
+                cir.setReturnValue(true);
+                return;
+            }
+        }
+
+        // Clic en filas
+        if (mouseY >= rowsTop && mouseY <= rowsTop + visibleRows * ROW_HEIGHT) {
+            int relY = (int) mouseY - rowsTop;
             int row = relY / ROW_HEIGHT;
             if (row >= 0 && row < visibleRows) {
                 int treeIndex = emiforest$scrollOffset + row;
@@ -305,7 +343,8 @@ public abstract class BoMScreenMixin {
             }
         }
 
-        int buttonY = PANEL_Y + HEADER_HEIGHT + visibleRows * ROW_HEIGHT + 4;
+        // Botón eliminar
+        int buttonY = rowsTop + visibleRows * ROW_HEIGHT + 4;
         if (mouseY >= buttonY && mouseY <= buttonY + BUTTON_HEIGHT &&
                 mouseX >= PANEL_X + 5 && mouseX <= PANEL_X + PANEL_WIDTH - 5) {
             ForestManager.deleteAll();
@@ -377,6 +416,32 @@ public abstract class BoMScreenMixin {
 
     }
 
+    @Inject(method = "mouseDragged", at = @At("HEAD"), cancellable = true)
+    private void onMouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY, CallbackInfoReturnable<Boolean> cir) {
+        if (!emiforest$isDraggingScrollbar) return;
+
+        List<dev.emi.emi.bom.MaterialTree> trees = ForestManager.getTrees();
+        int totalRows = trees.size();
+        if (totalRows <= MAX_VISIBLE_ROWS || emiforest$isCollapsed) {
+            emiforest$isDraggingScrollbar = false;
+            return;
+        }
+
+        int maxOffset = Math.max(0, totalRows - MAX_VISIBLE_ROWS);
+        int rowsTop = PANEL_Y + HEADER_HEIGHT;
+        int scrollbarH = MAX_VISIBLE_ROWS * ROW_HEIGHT;
+        int thumbH = Math.max(8, scrollbarH * MAX_VISIBLE_ROWS / totalRows);
+        int trackRange = scrollbarH - thumbH;
+        if (trackRange <= 0) {
+            emiforest$isDraggingScrollbar = false;
+            return;
+        }
+
+        float ratio = (float) (mouseY - rowsTop - thumbH / 2.0) / trackRange;
+        ratio = Math.max(0f, Math.min(1f, ratio));
+        emiforest$scrollOffset = Math.round(ratio * maxOffset);
+        cir.setReturnValue(true);
+    }
     @Unique
     private static char keyCodeToChar(int keyCode, boolean shift, boolean capsLock) {
 
