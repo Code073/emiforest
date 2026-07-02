@@ -16,10 +16,9 @@ apply plugin: 'eclipse'
 apply plugin: 'maven-publish'
 
 
-version = '1.0.0'
-group = 'com.emiforest'
-archivesBaseName = 'emiforest'
-
+version = project.hasProperty('mod_version') ? project.mod_version : '1.0.0'
+group = project.hasProperty('mod_group') ? project.mod_group : 'com.emiforest'
+archivesBaseName = project.hasProperty('archives_base_name') ? project.archives_base_name : 'emiforest'
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 println "========================================"
@@ -146,11 +145,9 @@ jar {
     manifest {
 
         attributes(
-
                 "Specification-Title": "EMI Forest",
                 "Specification-Vendor": "EMI Forest",
                 "Specification-Version": "1",
-
                 "Implementation-Title": project.name,
                 "Implementation-Version": project.version,
                 "Implementation-Vendor": "EMI Forest",

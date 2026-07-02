@@ -5,6 +5,7 @@ import dev.emi.emi.screen.BoMScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 import org.spongepowered.asm.mixin.Mixin;
@@ -41,7 +42,8 @@ public abstract class BoMScreenMixin {
     @Unique
     private static final int MAX_NAME_LENGTH =19;
 
-
+    @Unique
+    private static final int C_EDIT_SELECTION = new Color(90, 150, 230, 130).getRGB();
     @Unique
     private static final int C_BG_TOP        = new Color(16, 22, 18, 235).getRGB();
     @Unique
@@ -104,6 +106,10 @@ public abstract class BoMScreenMixin {
     private boolean emiforest$capsLockOn = false;
     @Unique
     private boolean emiforest$isDraggingScrollbar = false;
+    @Unique
+    private int emiforest$cursorPos = 0;
+    @Unique
+    private int emiforest$selectionAnchor = -1; // -1 significa que no hay selección activa
 
 
     @Inject(method = "render", at = @At("TAIL"))
@@ -148,20 +154,39 @@ public abstract class BoMScreenMixin {
                     && mouseY >= y && mouseY < y + ROW_HEIGHT;
 
             if (emiforest$isEditing && treeIndex == emiforest$editingTreeIndex) {
-                String display = emiforest$editingText + (System.currentTimeMillis() % 1000 > 500 ? "_" : "");
+                graphics.fill(PANEL_X + 3, y + 1, PANEL_X + PANEL_WIDTH - 3, y + ROW_HEIGHT - 1, C_EDIT_BG);
+                drawBorder(graphics, PANEL_X + 3, y + 1, PANEL_WIDTH - 6, ROW_HEIGHT - 2, C_EDIT_BORDER);
 
+                int textX = PANEL_X + 8;
+                int textY = y + 3;
+
+                // Resaltado de selección
+                if (emiforest$selectionAnchor != -1 && emiforest$selectionAnchor != emiforest$cursorPos) {
+                    int selStart = Math.min(emiforest$selectionAnchor, emiforest$cursorPos);
+                    int selEnd = Math.max(emiforest$selectionAnchor, emiforest$cursorPos);
+                    int selStartX = textX + font.width(emiforest$editingText.substring(0, selStart));
+                    int selEndX = textX + font.width(emiforest$editingText.substring(0, selEnd));
+                    graphics.fill(selStartX, y + 2, selEndX, y + ROW_HEIGHT - 2, C_EDIT_SELECTION);
+                }
+
+                graphics.drawString(font, Component.literal(emiforest$editingText), textX, textY, C_EDIT_TEXT);
+
+                // Cursor parpadeante
+                if (System.currentTimeMillis() % 1000 > 500) {
+                    int safeCursor = Math.max(0, Math.min(emiforest$cursorPos, emiforest$editingText.length()));
+                    int cursorX = textX + font.width(emiforest$editingText.substring(0, safeCursor));
+                    graphics.fill(cursorX, y + 2, cursorX + 1, y + ROW_HEIGHT - 2, C_EDIT_TEXT);
+                }
+
+                // Indicador de Bloq Mayús
                 if (emiforest$capsLockOn) {
                     String caps = "CAPS";
                     int capsWidth = font.width(caps);
                     graphics.drawString(font, Component.literal(caps),
                             PANEL_X + PANEL_WIDTH - capsWidth - 6, y + 3, C_CAPS_INDICATOR);
                 }
-                graphics.fill(PANEL_X + 3, y + 1, PANEL_X + PANEL_WIDTH - 3, y + ROW_HEIGHT - 1, C_EDIT_BG);
-                drawBorder(graphics, PANEL_X + 3, y + 1, PANEL_WIDTH - 6, ROW_HEIGHT - 2, C_EDIT_BORDER);
-                graphics.drawString(font, Component.literal(display), PANEL_X + 8, y + 3, C_EDIT_TEXT);
                 continue;
             }
-
             boolean selected = treeIndex == current;
             if (selected) {
                 graphics.fill(PANEL_X + 3, y + 1, PANEL_X + PANEL_WIDTH - 3, y + ROW_HEIGHT - 1, C_ROW_SELECTED_BG);
@@ -387,35 +412,135 @@ public abstract class BoMScreenMixin {
             return;
         }
 
-        boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
-        char typedChar = keyCodeToChar(keyCode, shift, emiforest$capsLockOn);
-        if (typedChar != 0) {
-            if (emiforest$editingText.length() < MAX_NAME_LENGTH) {
-                emiforest$editingText += typedChar;
-            }
+        boolean ctrl = Screen.hasControlDown();
+        boolean shift = Screen.hasShiftDown();
+
+        // Atajos de teclado: Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+V
+        if (ctrl && keyCode == GLFW.GLFW_KEY_A) {
+            emiforest$selectionAnchor = 0;
+            emiforest$cursorPos = emiforest$editingText.length();
             cir.setReturnValue(true);
+            return;
+        }
+        if (ctrl && keyCode == GLFW.GLFW_KEY_C) {
+            emiforest$copySelectionToClipboard();
+            cir.setReturnValue(true);
+            return;
+        }
+        if (ctrl && keyCode == GLFW.GLFW_KEY_X) {
+            emiforest$copySelectionToClipboard();
+            emiforest$deleteSelection();
+            cir.setReturnValue(true);
+            return;
+        }
+        if (ctrl && keyCode == GLFW.GLFW_KEY_V) {
+            emiforest$pasteFromClipboard();
+            cir.setReturnValue(true);
+            return;
         }
 
+        // Navegación con teclas de flecha
+        if (keyCode == GLFW.GLFW_KEY_LEFT) {
+            if (shift) {
+                if (emiforest$selectionAnchor == -1) emiforest$selectionAnchor = emiforest$cursorPos;
+                emiforest$cursorPos = Math.max(0, emiforest$cursorPos - 1);
+            } else {
+                if (emiforest$selectionAnchor != -1) {
+                    emiforest$cursorPos = Math.min(emiforest$selectionAnchor, emiforest$cursorPos);
+                    emiforest$selectionAnchor = -1;
+                } else {
+                    emiforest$cursorPos = Math.max(0, emiforest$cursorPos - 1);
+                }
+            }
+            cir.setReturnValue(true);
+            return;
+        }
+        if (keyCode == GLFW.GLFW_KEY_RIGHT) {
+            if (shift) {
+                if (emiforest$selectionAnchor == -1) emiforest$selectionAnchor = emiforest$cursorPos;
+                emiforest$cursorPos = Math.min(emiforest$editingText.length(), emiforest$cursorPos + 1);
+            } else {
+                if (emiforest$selectionAnchor != -1) {
+                    emiforest$cursorPos = Math.max(emiforest$selectionAnchor, emiforest$cursorPos);
+                    emiforest$selectionAnchor = -1;
+                } else {
+                    emiforest$cursorPos = Math.min(emiforest$editingText.length(), emiforest$cursorPos + 1);
+                }
+            }
+            cir.setReturnValue(true);
+            return;
+        }
+        if (keyCode == GLFW.GLFW_KEY_HOME) {
+            if (shift) {
+                if (emiforest$selectionAnchor == -1) emiforest$selectionAnchor = emiforest$cursorPos;
+            } else {
+                emiforest$selectionAnchor = -1;
+            }
+            emiforest$cursorPos = 0;
+            cir.setReturnValue(true);
+            return;
+        }
+        if (keyCode == GLFW.GLFW_KEY_END) {
+            if (shift) {
+                if (emiforest$selectionAnchor == -1) emiforest$selectionAnchor = emiforest$cursorPos;
+            } else {
+                emiforest$selectionAnchor = -1;
+            }
+            emiforest$cursorPos = emiforest$editingText.length();
+            cir.setReturnValue(true);
+            return;
+        }
+
+        // Enter: guardar
         if (keyCode == GLFW.GLFW_KEY_ENTER) {
             applyEditing();
             cir.setReturnValue(true);
             return;
         }
+        // Escape: cancelar
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             cancelEditing();
             cir.setReturnValue(true);
             return;
         }
+
+        // Backspace y Delete
         if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
-            if (!emiforest$editingText.isEmpty()) {
-                emiforest$editingText = emiforest$editingText.substring(0, emiforest$editingText.length() - 1);
+            if (emiforest$selectionAnchor != -1) {
+                emiforest$deleteSelection();
+            } else if (emiforest$cursorPos > 0) {
+                emiforest$editingText = emiforest$editingText.substring(0, emiforest$cursorPos - 1)
+                        + emiforest$editingText.substring(emiforest$cursorPos);
+                emiforest$cursorPos--;
+            }
+            cir.setReturnValue(true);
+            return;
+        }
+        if (keyCode == GLFW.GLFW_KEY_DELETE) {
+            if (emiforest$selectionAnchor != -1) {
+                emiforest$deleteSelection();
+            } else if (emiforest$cursorPos < emiforest$editingText.length()) {
+                emiforest$editingText = emiforest$editingText.substring(0, emiforest$cursorPos)
+                        + emiforest$editingText.substring(emiforest$cursorPos + 1);
             }
             cir.setReturnValue(true);
             return;
         }
 
+        // Caracteres normales (letras, números, símbolos)
+        char typedChar = keyCodeToChar(keyCode, shift, emiforest$capsLockOn);
+        if (typedChar != 0) {
+            if (emiforest$selectionAnchor != -1) {
+                emiforest$deleteSelection();
+            }
+            if (emiforest$editingText.length() < MAX_NAME_LENGTH) {
+                emiforest$editingText = emiforest$editingText.substring(0, emiforest$cursorPos)
+                        + typedChar + emiforest$editingText.substring(emiforest$cursorPos);
+                emiforest$cursorPos++;
+            }
+            cir.setReturnValue(true);
+        }
     }
-
     @Inject(method = "mouseDragged", at = @At("HEAD"), cancellable = true)
     private void onMouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY, CallbackInfoReturnable<Boolean> cir) {
         if (!emiforest$isDraggingScrollbar) return;
@@ -490,6 +615,8 @@ public abstract class BoMScreenMixin {
         emiforest$isEditing = true;
         emiforest$editingTreeIndex = treeIndex;
         emiforest$editingText = ForestManager.getDisplayName(treeIndex);
+        emiforest$cursorPos = emiforest$editingText.length();
+        emiforest$selectionAnchor = -1;
     }
 
     @Unique
@@ -504,6 +631,8 @@ public abstract class BoMScreenMixin {
         emiforest$isEditing = false;
         emiforest$editingTreeIndex = -1;
         emiforest$editingText = "";
+        emiforest$cursorPos = 0;
+        emiforest$selectionAnchor = -1;
     }
 
     @Unique
@@ -511,5 +640,53 @@ public abstract class BoMScreenMixin {
         emiforest$isEditing = false;
         emiforest$editingTreeIndex = -1;
         emiforest$editingText = "";
+        emiforest$cursorPos = 0;
+        emiforest$selectionAnchor = -1;
+    }
+
+    @Unique
+    private void emiforest$deleteSelection() {
+        if (emiforest$selectionAnchor == -1) return;
+        int start = Math.min(emiforest$selectionAnchor, emiforest$cursorPos);
+        int end = Math.max(emiforest$selectionAnchor, emiforest$cursorPos);
+        emiforest$editingText = emiforest$editingText.substring(0, start) + emiforest$editingText.substring(end);
+        emiforest$cursorPos = start;
+        emiforest$selectionAnchor = -1;
+    }
+
+    @Unique
+    private void emiforest$copySelectionToClipboard() {
+        String toCopy;
+        if (emiforest$selectionAnchor != -1 && emiforest$selectionAnchor != emiforest$cursorPos) {
+            int start = Math.min(emiforest$selectionAnchor, emiforest$cursorPos);
+            int end = Math.max(emiforest$selectionAnchor, emiforest$cursorPos);
+            toCopy = emiforest$editingText.substring(start, end);
+        } else {
+            toCopy = emiforest$editingText;
+        }
+        long window = Minecraft.getInstance().getWindow().getWindow();
+        GLFW.glfwSetClipboardString(window, toCopy);
+    }
+
+    @Unique
+    private void emiforest$pasteFromClipboard() {
+        long window = Minecraft.getInstance().getWindow().getWindow();
+        String clip = GLFW.glfwGetClipboardString(window);
+        if (clip == null || clip.isEmpty()) return;
+        clip = clip.replace("\n", " ").replace("\r", "");
+
+        if (emiforest$selectionAnchor != -1) {
+            emiforest$deleteSelection();
+        }
+
+        int availableSpace = MAX_NAME_LENGTH - emiforest$editingText.length();
+        if (availableSpace <= 0) return;
+        if (clip.length() > availableSpace) {
+            clip = clip.substring(0, availableSpace);
+        }
+
+        emiforest$editingText = emiforest$editingText.substring(0, emiforest$cursorPos)
+                + clip + emiforest$editingText.substring(emiforest$cursorPos);
+        emiforest$cursorPos += clip.length();
     }
 }
