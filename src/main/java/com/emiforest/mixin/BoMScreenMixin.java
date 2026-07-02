@@ -37,6 +37,8 @@ public abstract class BoMScreenMixin {
     private static final int BUTTON_HEIGHT = 15;
     @Unique
     private static final int SCROLLBAR_W = 3;
+    @Unique
+    private static final int MAX_NAME_LENGTH =19;
 
 
     @Unique
@@ -83,10 +85,12 @@ public abstract class BoMScreenMixin {
     private static final int C_DELETE_BORDER = new Color(200, 90, 90, 255).getRGB();
     @Unique
     private static final int C_TEXT_ON_DANGER = new Color(255, 235, 235, 255).getRGB();
+    @Unique
+    private static final int C_CAPS_INDICATOR = new Color(255, 190, 90, 255).getRGB();
 
 
     @Unique
-    private boolean emiforest$isCollapsed = false;
+    private static boolean emiforest$isCollapsed = false;
     @Unique
     private int emiforest$scrollOffset = 0;
     @Unique
@@ -95,6 +99,9 @@ public abstract class BoMScreenMixin {
     private int emiforest$editingTreeIndex = -1;
     @Unique
     private String emiforest$editingText = "";
+
+    @Unique
+    private boolean emiforest$capsLockOn = false;
 
 
     @Inject(method = "render", at = @At("TAIL"))
@@ -140,6 +147,13 @@ public abstract class BoMScreenMixin {
 
             if (emiforest$isEditing && treeIndex == emiforest$editingTreeIndex) {
                 String display = emiforest$editingText + (System.currentTimeMillis() % 1000 > 500 ? "_" : "");
+
+                if (emiforest$capsLockOn) {
+                    String caps = "CAPS";
+                    int capsWidth = font.width(caps);
+                    graphics.drawString(font, Component.literal(caps),
+                            PANEL_X + PANEL_WIDTH - capsWidth - 6, y + 3, C_CAPS_INDICATOR);
+                }
                 graphics.fill(PANEL_X + 3, y + 1, PANEL_X + PANEL_WIDTH - 3, y + ROW_HEIGHT - 1, C_EDIT_BG);
                 drawBorder(graphics, PANEL_X + 3, y + 1, PANEL_WIDTH - 6, ROW_HEIGHT - 2, C_EDIT_BORDER);
                 graphics.drawString(font, Component.literal(display), PANEL_X + 8, y + 3, C_EDIT_TEXT);
@@ -245,7 +259,7 @@ public abstract class BoMScreenMixin {
         if (mouseX < PANEL_X || mouseX > PANEL_X + PANEL_WIDTH ||
                 mouseY < PANEL_Y || mouseY > PANEL_Y + panelHeight) {
             if (emiforest$isEditing) {
-                cancelEditing();
+                applyEditing();
                 cir.setReturnValue(true);
             }
             return;
@@ -328,6 +342,21 @@ public abstract class BoMScreenMixin {
     private void onKeyPressed(int keyCode, int scanCode, int modifiers, CallbackInfoReturnable<Boolean> cir) {
         if (!emiforest$isEditing) return;
 
+        if (keyCode == GLFW.GLFW_KEY_CAPS_LOCK) {
+            emiforest$capsLockOn = !emiforest$capsLockOn;
+            cir.setReturnValue(true);
+            return;
+        }
+
+        boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
+        char typedChar = keyCodeToChar(keyCode, shift, emiforest$capsLockOn);
+        if (typedChar != 0) {
+            if (emiforest$editingText.length() < MAX_NAME_LENGTH) {
+                emiforest$editingText += typedChar;
+            }
+            cir.setReturnValue(true);
+        }
+
         if (keyCode == GLFW.GLFW_KEY_ENTER) {
             applyEditing();
             cir.setReturnValue(true);
@@ -346,24 +375,15 @@ public abstract class BoMScreenMixin {
             return;
         }
 
-        // Solo Shift, sin Caps Lock
-        char typedChar = keyCodeToChar(keyCode, modifiers);
-        if (typedChar != 0) {
-            if (emiforest$editingText.length() < 30) {
-                emiforest$editingText += typedChar;
-            }
-            cir.setReturnValue(true);
-        }
     }
 
     @Unique
-    private static char keyCodeToChar(int keyCode, int modifiers) {
-        boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
+    private static char keyCodeToChar(int keyCode, boolean shift, boolean capsLock) {
 
-        // Letras: Shift = mayúsculas
         if (keyCode >= GLFW.GLFW_KEY_A && keyCode <= GLFW.GLFW_KEY_Z) {
             char base = (char) ('A' + (keyCode - GLFW.GLFW_KEY_A));
-            return shift ? base : Character.toLowerCase(base);
+            boolean upper = shift ^ capsLock;  // XOR: si uno es true y el otro no, mayúscula
+            return upper ? base : Character.toLowerCase(base);
         }
 
         // Números
