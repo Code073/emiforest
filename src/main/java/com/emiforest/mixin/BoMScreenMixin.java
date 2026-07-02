@@ -2,8 +2,10 @@ package com.emiforest.mixin;
 
 import com.emiforest.forest.ForestManager;
 import dev.emi.emi.screen.BoMScreen;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 import org.spongepowered.asm.mixin.Mixin;
@@ -37,6 +39,8 @@ public abstract class BoMScreenMixin {
     private static final int BUTTON_HEIGHT = 15;
     @Unique
     private static final int SCROLLBAR_W = 3;
+    @Unique
+    private static final int MAX_NAME_LENGTH = 30;
 
 
     @Unique
@@ -72,9 +76,13 @@ public abstract class BoMScreenMixin {
     @Unique
     private static final int C_EDIT_TEXT     = new Color(255, 224, 120, 255).getRGB();
     @Unique
+    private static final int C_EDIT_SELECTION = new Color(90, 150, 230, 130).getRGB();
+    @Unique
     private static final int C_SCROLL_TRACK  = new Color(255, 255, 255, 14).getRGB();
     @Unique
     private static final int C_SCROLL_THUMB  = new Color(120, 180, 124, 220).getRGB();
+    @Unique
+    private static final int C_SCROLL_THUMB_ACTIVE = new Color(160, 220, 164, 255).getRGB();
     @Unique
     private static final int C_DELETE_BG     = new Color(120, 34, 34, 210).getRGB();
     @Unique
@@ -83,10 +91,14 @@ public abstract class BoMScreenMixin {
     private static final int C_DELETE_BORDER = new Color(200, 90, 90, 255).getRGB();
     @Unique
     private static final int C_TEXT_ON_DANGER = new Color(255, 235, 235, 255).getRGB();
-
-
     @Unique
-    private boolean emiforest$isCollapsed = false;
+    private static final int C_CAPS_INDICATOR = new Color(255, 190, 90, 255).getRGB();
+
+
+    // El colapso se guarda como estático para persistir entre aperturas de la pantalla
+    @Unique
+    private static boolean emiforest$isCollapsedStatic = false;
+
     @Unique
     private int emiforest$scrollOffset = 0;
     @Unique
@@ -95,6 +107,16 @@ public abstract class BoMScreenMixin {
     private int emiforest$editingTreeIndex = -1;
     @Unique
     private String emiforest$editingText = "";
+    @Unique
+    private int emiforest$cursorPos = 0;
+    // -1 significa que no hay selección activa
+    @Unique
+    private int emiforest$selectionAnchor = -1;
+    @Unique
+    private boolean emiforest$capsLockOn = false;
+
+    @Unique
+    private boolean emiforest$isDraggingScrollbar = false;
 
 
     @Inject(method = "render", at = @At("TAIL"))
@@ -107,7 +129,7 @@ public abstract class BoMScreenMixin {
 
         Font font = ((BoMScreen) (Object) this).getMinecraft().font;
 
-        if (emiforest$isCollapsed) {
+        if (emiforest$isCollapsedStatic) {
             drawPanelBackground(graphics, PANEL_X, PANEL_Y, PANEL_WIDTH, COLLAPSED_HEIGHT);
             drawHeader(graphics, font, mouseX, mouseY, PANEL_X, PANEL_Y, PANEL_WIDTH,
                     Component.translatable("emi_forest.gui.panel_title"),
@@ -139,10 +161,37 @@ public abstract class BoMScreenMixin {
                     && mouseY >= y && mouseY < y + ROW_HEIGHT;
 
             if (emiforest$isEditing && treeIndex == emiforest$editingTreeIndex) {
-                String display = emiforest$editingText + (System.currentTimeMillis() % 1000 > 500 ? "_" : "");
                 graphics.fill(PANEL_X + 3, y + 1, PANEL_X + PANEL_WIDTH - 3, y + ROW_HEIGHT - 1, C_EDIT_BG);
                 drawBorder(graphics, PANEL_X + 3, y + 1, PANEL_WIDTH - 6, ROW_HEIGHT - 2, C_EDIT_BORDER);
-                graphics.drawString(font, Component.literal(display), PANEL_X + 8, y + 3, C_EDIT_TEXT);
+
+                int textX = PANEL_X + 8;
+                int textY = y + 3;
+
+                // Resaltado de selección
+                if (emiforest$selectionAnchor != -1 && emiforest$selectionAnchor != emiforest$cursorPos) {
+                    int selStart = Math.min(emiforest$selectionAnchor, emiforest$cursorPos);
+                    int selEnd = Math.max(emiforest$selectionAnchor, emiforest$cursorPos);
+                    int selStartX = textX + font.width(emiforest$editingText.substring(0, selStart));
+                    int selEndX = textX + font.width(emiforest$editingText.substring(0, selEnd));
+                    graphics.fill(selStartX, y + 2, selEndX, y + ROW_HEIGHT - 2, C_EDIT_SELECTION);
+                }
+
+                graphics.drawString(font, Component.literal(emiforest$editingText), textX, textY, C_EDIT_TEXT);
+
+                // Cursor parpadeante
+                if (System.currentTimeMillis() % 1000 > 500) {
+                    int safeCursor = Math.max(0, Math.min(emiforest$cursorPos, emiforest$editingText.length()));
+                    int cursorX = textX + font.width(emiforest$editingText.substring(0, safeCursor));
+                    graphics.fill(cursorX, y + 2, cursorX + 1, y + ROW_HEIGHT - 2, C_EDIT_TEXT);
+                }
+
+                // Indicador de Bloq Mayús
+                if (emiforest$capsLockOn) {
+                    String caps = "CAPS";
+                    int capsWidth = font.width(caps);
+                    graphics.drawString(font, Component.literal(caps),
+                            PANEL_X + PANEL_WIDTH - capsWidth - 6, y + 3, C_CAPS_INDICATOR);
+                }
                 continue;
             }
 
@@ -173,7 +222,8 @@ public abstract class BoMScreenMixin {
             float ratio = maxOffset == 0 ? 0 : (float) emiforest$scrollOffset / maxOffset;
             int thumbH = Math.max(8, scrollbarH * MAX_VISIBLE_ROWS / totalRows);
             int thumbY = scrollbarY + (int) ((scrollbarH - thumbH) * ratio);
-            graphics.fill(scrollbarX, thumbY, scrollbarX + SCROLLBAR_W, thumbY + thumbH, C_SCROLL_THUMB);
+            int thumbColor = emiforest$isDraggingScrollbar ? C_SCROLL_THUMB_ACTIVE : C_SCROLL_THUMB;
+            graphics.fill(scrollbarX, thumbY, scrollbarX + SCROLLBAR_W, thumbY + thumbH, thumbColor);
         }
 
 
@@ -191,8 +241,15 @@ public abstract class BoMScreenMixin {
         int textWidth = font.width(buttonText);
         graphics.drawString(font, Component.literal(buttonText),
                 buttonX + (buttonWidth - textWidth) / 2, buttonY + (BUTTON_HEIGHT - 8) / 2, C_TEXT_ON_DANGER);
-    }
 
+        if (emiforest$isDraggingScrollbar) {
+            long window = Minecraft.getInstance().getWindow().getWindow();
+            if (GLFW.glfwGetMouseButton(window, GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_RELEASE) {
+                emiforest$isDraggingScrollbar = false;
+            }
+        }
+
+    }
 
     @Unique
     private void drawPanelBackground(GuiGraphics graphics, int x, int y, int w, int h) {
@@ -234,44 +291,77 @@ public abstract class BoMScreenMixin {
             return;
         }
 
+        Font font = ((BoMScreen) (Object) this).getMinecraft().font;
+
         int panelHeight;
-        if (emiforest$isCollapsed) {
+        if (emiforest$isCollapsedStatic) {
             panelHeight = COLLAPSED_HEIGHT;
         } else {
             int visibleRows = Math.min(MAX_VISIBLE_ROWS, trees.size() - emiforest$scrollOffset);
             panelHeight = HEADER_HEIGHT + visibleRows * ROW_HEIGHT + BUTTON_HEIGHT + 6;
         }
 
+        // Click fuera del panel: si estábamos editando, se aplica el cambio (no se descarta)
         if (mouseX < PANEL_X || mouseX > PANEL_X + PANEL_WIDTH ||
                 mouseY < PANEL_Y || mouseY > PANEL_Y + panelHeight) {
             if (emiforest$isEditing) {
-                cancelEditing();
+                applyEditing();
                 cir.setReturnValue(true);
             }
             return;
         }
 
         if (mouseY >= PANEL_Y && mouseY <= PANEL_Y + HEADER_HEIGHT) {
-            emiforest$isCollapsed = !emiforest$isCollapsed;
-            if (emiforest$isEditing) cancelEditing();
+            if (emiforest$isEditing) applyEditing();
+            emiforest$isCollapsedStatic = !emiforest$isCollapsedStatic;
             cir.setReturnValue(true);
             return;
         }
 
-        if (emiforest$isCollapsed) {
+        if (emiforest$isCollapsedStatic) {
             cir.setReturnValue(true);
             return;
         }
 
         int visibleRows = Math.min(MAX_VISIBLE_ROWS, trees.size() - emiforest$scrollOffset);
-        if (mouseY >= PANEL_Y + HEADER_HEIGHT && mouseY <= PANEL_Y + HEADER_HEIGHT + visibleRows * ROW_HEIGHT) {
-            int relY = (int) mouseY - (PANEL_Y + HEADER_HEIGHT);
+        int totalRows = trees.size();
+        int rowsTop = PANEL_Y + HEADER_HEIGHT;
+
+        // Zona de la scrollbar: iniciar arrastre / salto directo
+        if (totalRows > MAX_VISIBLE_ROWS) {
+            int scrollbarX = PANEL_X + PANEL_WIDTH - SCROLLBAR_W - 3;
+            int scrollbarH = visibleRows * ROW_HEIGHT;
+            if (mouseX >= scrollbarX - 2 && mouseX <= scrollbarX + SCROLLBAR_W + 2
+                    && mouseY >= rowsTop && mouseY <= rowsTop + scrollbarH) {
+                if (emiforest$isEditing) applyEditing();
+
+                int maxOffset = Math.max(0, totalRows - MAX_VISIBLE_ROWS);
+                int thumbH = Math.max(8, scrollbarH * MAX_VISIBLE_ROWS / totalRows);
+                int trackRange = scrollbarH - thumbH;
+                if (trackRange > 0) {
+                    float ratio = (float) (mouseY - rowsTop - thumbH / 2.0) / trackRange;
+                    ratio = Math.max(0f, Math.min(1f, ratio));
+                    emiforest$scrollOffset = Math.round(ratio * maxOffset);
+                }
+                emiforest$isDraggingScrollbar = true;
+                cir.setReturnValue(true);
+                return;
+            }
+        }
+
+        if (mouseY >= rowsTop && mouseY <= rowsTop + visibleRows * ROW_HEIGHT) {
+            int relY = (int) mouseY - rowsTop;
             int row = relY / ROW_HEIGHT;
             if (row >= 0 && row < visibleRows) {
                 int treeIndex = emiforest$scrollOffset + row;
 
                 if (button == 1) {
-                    if (emiforest$isEditing && emiforest$editingTreeIndex != treeIndex) {
+                    // Click derecho sobre la fila que ya se está editando: no reiniciar el texto
+                    if (emiforest$isEditing && emiforest$editingTreeIndex == treeIndex) {
+                        cir.setReturnValue(true);
+                        return;
+                    }
+                    if (emiforest$isEditing) {
                         applyEditing();
                     }
                     startEditing(treeIndex);
@@ -280,6 +370,20 @@ public abstract class BoMScreenMixin {
                 }
 
                 if (button == 0) {
+                    // Click izquierdo sobre la fila que se está editando: mover el cursor de texto
+                    if (emiforest$isEditing && emiforest$editingTreeIndex == treeIndex) {
+                        int textX = PANEL_X + 8;
+                        int clickIndex = emiforest$getCursorIndexFromX(font, emiforest$editingText, textX, (int) mouseX);
+                        if (Screen.hasShiftDown()) {
+                            if (emiforest$selectionAnchor == -1) emiforest$selectionAnchor = emiforest$cursorPos;
+                        } else {
+                            emiforest$selectionAnchor = -1;
+                        }
+                        emiforest$cursorPos = clickIndex;
+                        cir.setReturnValue(true);
+                        return;
+                    }
+
                     if (emiforest$isEditing) {
                         applyEditing();
                     }
@@ -291,11 +395,11 @@ public abstract class BoMScreenMixin {
             }
         }
 
-        int buttonY = PANEL_Y + HEADER_HEIGHT + visibleRows * ROW_HEIGHT + 4;
+        int buttonY = rowsTop + visibleRows * ROW_HEIGHT + 4;
         if (mouseY >= buttonY && mouseY <= buttonY + BUTTON_HEIGHT &&
                 mouseX >= PANEL_X + 5 && mouseX <= PANEL_X + PANEL_WIDTH - 5) {
+            if (emiforest$isEditing) applyEditing();
             ForestManager.deleteAll();
-            if (emiforest$isEditing) cancelEditing();
             cir.setReturnValue(true);
             return;
         }
@@ -303,10 +407,47 @@ public abstract class BoMScreenMixin {
         cir.setReturnValue(true);
     }
 
+    @Inject(method = "mouseDragged", at = @At("HEAD"), cancellable = true)
+    private void onMouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY, CallbackInfoReturnable<Boolean> cir) {
+        if (!emiforest$isDraggingScrollbar) return;
+
+        // Verificar si el botón izquierdo (GLFW_MOUSE_BUTTON_LEFT = 0) aún está presionado
+        long window = Minecraft.getInstance().getWindow().getWindow();
+        if (GLFW.glfwGetMouseButton(window, GLFW.GLFW_MOUSE_BUTTON_LEFT) != GLFW.GLFW_PRESS) {
+            emiforest$isDraggingScrollbar = false;
+            cir.setReturnValue(true);
+            return;
+        }
+
+        List<dev.emi.emi.bom.MaterialTree> trees = ForestManager.getTrees();
+        int totalRows = trees.size();
+        if (totalRows <= MAX_VISIBLE_ROWS || emiforest$isCollapsedStatic) {
+            emiforest$isDraggingScrollbar = false;
+            return;
+        }
+
+        int maxOffset = Math.max(0, totalRows - MAX_VISIBLE_ROWS);
+        int rowsTop = PANEL_Y + HEADER_HEIGHT;
+        int scrollbarH = MAX_VISIBLE_ROWS * ROW_HEIGHT;
+        int thumbH = Math.max(8, scrollbarH * MAX_VISIBLE_ROWS / totalRows);
+        int trackRange = scrollbarH - thumbH;
+        if (trackRange <= 0) {
+            emiforest$isDraggingScrollbar = false;
+            return;
+        }
+
+        float ratio = (float) (mouseY - rowsTop - thumbH / 2.0) / trackRange;
+        ratio = Math.max(0f, Math.min(1f, ratio));
+        emiforest$scrollOffset = Math.round(ratio * maxOffset);
+        cir.setReturnValue(true);
+    }
+
+
+
     @Inject(method = "mouseScrolled", at = @At("HEAD"), cancellable = true)
     private void onMouseScrolled(double mouseX, double mouseY, double delta, CallbackInfoReturnable<Boolean> cir) {
         List<dev.emi.emi.bom.MaterialTree> trees = ForestManager.getTrees();
-        if (trees.isEmpty() || emiforest$isCollapsed) return;
+        if (trees.isEmpty() || emiforest$isCollapsedStatic) return;
 
         int totalRows = trees.size();
         int maxOffset = Math.max(0, totalRows - MAX_VISIBLE_ROWS);
@@ -328,6 +469,15 @@ public abstract class BoMScreenMixin {
     private void onKeyPressed(int keyCode, int scanCode, int modifiers, CallbackInfoReturnable<Boolean> cir) {
         if (!emiforest$isEditing) return;
 
+        if (keyCode == GLFW.GLFW_KEY_CAPS_LOCK) {
+            emiforest$capsLockOn = !emiforest$capsLockOn;
+            cir.setReturnValue(true);
+            return;
+        }
+
+        boolean ctrl = Screen.hasControlDown();
+        boolean shift = Screen.hasShiftDown();
+
         if (keyCode == GLFW.GLFW_KEY_ENTER) {
             applyEditing();
             cir.setReturnValue(true);
@@ -338,35 +488,128 @@ public abstract class BoMScreenMixin {
             cir.setReturnValue(true);
             return;
         }
+
+        if (ctrl && keyCode == GLFW.GLFW_KEY_A) {
+            emiforest$selectionAnchor = 0;
+            emiforest$cursorPos = emiforest$editingText.length();
+            cir.setReturnValue(true);
+            return;
+        }
+        if (ctrl && keyCode == GLFW.GLFW_KEY_C) {
+            emiforest$copySelectionToClipboard();
+            cir.setReturnValue(true);
+            return;
+        }
+        if (ctrl && keyCode == GLFW.GLFW_KEY_X) {
+            emiforest$copySelectionToClipboard();
+            emiforest$deleteSelection();
+            cir.setReturnValue(true);
+            return;
+        }
+        if (ctrl && keyCode == GLFW.GLFW_KEY_V) {
+            emiforest$pasteFromClipboard();
+            cir.setReturnValue(true);
+            return;
+        }
+
+        if (keyCode == GLFW.GLFW_KEY_LEFT) {
+            if (shift) {
+                if (emiforest$selectionAnchor == -1) emiforest$selectionAnchor = emiforest$cursorPos;
+                emiforest$cursorPos = Math.max(0, emiforest$cursorPos - 1);
+            } else {
+                if (emiforest$selectionAnchor != -1) {
+                    emiforest$cursorPos = Math.min(emiforest$selectionAnchor, emiforest$cursorPos);
+                    emiforest$selectionAnchor = -1;
+                } else {
+                    emiforest$cursorPos = Math.max(0, emiforest$cursorPos - 1);
+                }
+            }
+            cir.setReturnValue(true);
+            return;
+        }
+        if (keyCode == GLFW.GLFW_KEY_RIGHT) {
+            if (shift) {
+                if (emiforest$selectionAnchor == -1) emiforest$selectionAnchor = emiforest$cursorPos;
+                emiforest$cursorPos = Math.min(emiforest$editingText.length(), emiforest$cursorPos + 1);
+            } else {
+                if (emiforest$selectionAnchor != -1) {
+                    emiforest$cursorPos = Math.max(emiforest$selectionAnchor, emiforest$cursorPos);
+                    emiforest$selectionAnchor = -1;
+                } else {
+                    emiforest$cursorPos = Math.min(emiforest$editingText.length(), emiforest$cursorPos + 1);
+                }
+            }
+            cir.setReturnValue(true);
+            return;
+        }
+        if (keyCode == GLFW.GLFW_KEY_HOME) {
+            if (shift) {
+                if (emiforest$selectionAnchor == -1) emiforest$selectionAnchor = emiforest$cursorPos;
+            } else {
+                emiforest$selectionAnchor = -1;
+            }
+            emiforest$cursorPos = 0;
+            cir.setReturnValue(true);
+            return;
+        }
+        if (keyCode == GLFW.GLFW_KEY_END) {
+            if (shift) {
+                if (emiforest$selectionAnchor == -1) emiforest$selectionAnchor = emiforest$cursorPos;
+            } else {
+                emiforest$selectionAnchor = -1;
+            }
+            emiforest$cursorPos = emiforest$editingText.length();
+            cir.setReturnValue(true);
+            return;
+        }
+
         if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
-            if (!emiforest$editingText.isEmpty()) {
-                emiforest$editingText = emiforest$editingText.substring(0, emiforest$editingText.length() - 1);
+            if (emiforest$selectionAnchor != -1) {
+                emiforest$deleteSelection();
+            } else if (emiforest$cursorPos > 0) {
+                emiforest$editingText = emiforest$editingText.substring(0, emiforest$cursorPos - 1)
+                        + emiforest$editingText.substring(emiforest$cursorPos);
+                emiforest$cursorPos--;
+            }
+            cir.setReturnValue(true);
+            return;
+        }
+        if (keyCode == GLFW.GLFW_KEY_DELETE) {
+            if (emiforest$selectionAnchor != -1) {
+                emiforest$deleteSelection();
+            } else if (emiforest$cursorPos < emiforest$editingText.length()) {
+                emiforest$editingText = emiforest$editingText.substring(0, emiforest$cursorPos)
+                        + emiforest$editingText.substring(emiforest$cursorPos + 1);
             }
             cir.setReturnValue(true);
             return;
         }
 
-        // Solo Shift, sin Caps Lock
-        char typedChar = keyCodeToChar(keyCode, modifiers);
+        // Solo Shift y Bloq Mayús (sin Alt Gr, sin combinaciones complejas)
+        char typedChar = keyCodeToChar(keyCode, shift, emiforest$capsLockOn);
         if (typedChar != 0) {
-            if (emiforest$editingText.length() < 30) {
-                emiforest$editingText += typedChar;
+            if (emiforest$selectionAnchor != -1) {
+                emiforest$deleteSelection();
+            }
+            if (emiforest$editingText.length() < MAX_NAME_LENGTH) {
+                emiforest$editingText = emiforest$editingText.substring(0, emiforest$cursorPos)
+                        + typedChar + emiforest$editingText.substring(emiforest$cursorPos);
+                emiforest$cursorPos++;
             }
             cir.setReturnValue(true);
         }
     }
 
     @Unique
-    private static char keyCodeToChar(int keyCode, int modifiers) {
-        boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
-
-        // Letras: Shift = mayúsculas
+    private static char keyCodeToChar(int keyCode, boolean shift, boolean capsLock) {
+        // Letras: Bloq Mayús invierte el estado normal de Shift
         if (keyCode >= GLFW.GLFW_KEY_A && keyCode <= GLFW.GLFW_KEY_Z) {
             char base = (char) ('A' + (keyCode - GLFW.GLFW_KEY_A));
-            return shift ? base : Character.toLowerCase(base);
+            boolean upper = shift ^ capsLock;
+            return upper ? base : Character.toLowerCase(base);
         }
 
-        // Números
+        // Números (Bloq Mayús no afecta a los símbolos)
         if (keyCode >= GLFW.GLFW_KEY_0 && keyCode <= GLFW.GLFW_KEY_9) {
             if (shift) {
                 return switch (keyCode) {
@@ -399,12 +642,33 @@ public abstract class BoMScreenMixin {
         };
     }
 
+    /**
+     * Dado un punto X del click, devuelve el índice de carácter más cercano dentro del texto,
+     * midiendo el ancho real de cada carácter con la fuente actual.
+     */
+    @Unique
+    private static int emiforest$getCursorIndexFromX(Font font, String text, int textStartX, int clickX) {
+        int relativeX = clickX - textStartX;
+        if (relativeX <= 0) return 0;
+        int cumulative = 0;
+        for (int i = 0; i < text.length(); i++) {
+            int charWidth = font.width(String.valueOf(text.charAt(i)));
+            if (relativeX < cumulative + charWidth / 2) {
+                return i;
+            }
+            cumulative += charWidth;
+        }
+        return text.length();
+    }
+
 
     @Unique
     private void startEditing(int treeIndex) {
         emiforest$isEditing = true;
         emiforest$editingTreeIndex = treeIndex;
         emiforest$editingText = ForestManager.getDisplayName(treeIndex);
+        emiforest$cursorPos = emiforest$editingText.length();
+        emiforest$selectionAnchor = -1;
     }
 
     @Unique
@@ -419,6 +683,8 @@ public abstract class BoMScreenMixin {
         emiforest$isEditing = false;
         emiforest$editingTreeIndex = -1;
         emiforest$editingText = "";
+        emiforest$cursorPos = 0;
+        emiforest$selectionAnchor = -1;
     }
 
     @Unique
@@ -426,5 +692,53 @@ public abstract class BoMScreenMixin {
         emiforest$isEditing = false;
         emiforest$editingTreeIndex = -1;
         emiforest$editingText = "";
+        emiforest$cursorPos = 0;
+        emiforest$selectionAnchor = -1;
+    }
+
+    @Unique
+    private void emiforest$deleteSelection() {
+        if (emiforest$selectionAnchor == -1) return;
+        int start = Math.min(emiforest$selectionAnchor, emiforest$cursorPos);
+        int end = Math.max(emiforest$selectionAnchor, emiforest$cursorPos);
+        emiforest$editingText = emiforest$editingText.substring(0, start) + emiforest$editingText.substring(end);
+        emiforest$cursorPos = start;
+        emiforest$selectionAnchor = -1;
+    }
+
+    @Unique
+    private void emiforest$copySelectionToClipboard() {
+        String toCopy;
+        if (emiforest$selectionAnchor != -1 && emiforest$selectionAnchor != emiforest$cursorPos) {
+            int start = Math.min(emiforest$selectionAnchor, emiforest$cursorPos);
+            int end = Math.max(emiforest$selectionAnchor, emiforest$cursorPos);
+            toCopy = emiforest$editingText.substring(start, end);
+        } else {
+            toCopy = emiforest$editingText;
+        }
+        long window = Minecraft.getInstance().getWindow().getWindow();
+        GLFW.glfwSetClipboardString(window, toCopy);
+    }
+
+    @Unique
+    private void emiforest$pasteFromClipboard() {
+        long window = Minecraft.getInstance().getWindow().getWindow();
+        String clip = GLFW.glfwGetClipboardString(window);
+        if (clip == null || clip.isEmpty()) return;
+        clip = clip.replace("\n", " ").replace("\r", "");
+
+        if (emiforest$selectionAnchor != -1) {
+            emiforest$deleteSelection();
+        }
+
+        int availableSpace = MAX_NAME_LENGTH - emiforest$editingText.length();
+        if (availableSpace <= 0) return;
+        if (clip.length() > availableSpace) {
+            clip = clip.substring(0, availableSpace);
+        }
+
+        emiforest$editingText = emiforest$editingText.substring(0, emiforest$cursorPos)
+                + clip + emiforest$editingText.substring(emiforest$cursorPos);
+        emiforest$cursorPos += clip.length();
     }
 }

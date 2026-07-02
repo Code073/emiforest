@@ -1,5 +1,6 @@
 {
   "required": true,
+  "minVersion": "0.8",
   "package": "com.emiforest.mixin",
   "compatibilityLevel": "JAVA_17",
   "refmap": "emiforest.refmap.json",
