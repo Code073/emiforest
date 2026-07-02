@@ -98,6 +98,7 @@ minecraft {
 
 mixin {
     add sourceSets.main, "emiforest.refmap.json"
+
     config "emiforest.mixins.json"
 }
 
