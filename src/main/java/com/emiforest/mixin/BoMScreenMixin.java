@@ -111,11 +111,6 @@ public abstract class BoMScreenMixin {
     @Unique
     private int emiforest$selectionAnchor = -1; // -1 significa que no hay selección activa
 
-    @Unique
-    private static long emiforest$lastSaveTime = 0;
-    @Unique
-    private static final long emiforest$SAVE_COOLDOWN_MS = 500; // medio segundo de cooldown
-
 
     @Inject(method = "render", at = @At("TAIL"))
     private void renderForestOverlay(GuiGraphics graphics, int mouseX, int mouseY, float delta, CallbackInfo ci) {
@@ -696,10 +691,7 @@ public abstract class BoMScreenMixin {
     }
     @Inject(method = "recalculateTree", at = @At("TAIL"), remap = false)
     private void emiforest$onRecalculateTree(CallbackInfo ci) {
-        long now = System.currentTimeMillis();
-        if (now - emiforest$lastSaveTime >= emiforest$SAVE_COOLDOWN_MS) {
-            emiforest$lastSaveTime = now;
-            com.emiforest.save.ForestSaveManager.saveTrees();
-        }
+        com.emiforest.save.ForestAutoSaver.scheduleSave();
     }
+
 }

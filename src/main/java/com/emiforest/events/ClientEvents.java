@@ -1,5 +1,6 @@
 package com.emiforest.events;
 
+import com.emiforest.save.ForestAutoSaver;
 import com.emiforest.save.ForestSaveManager;
 import dev.emi.emi.api.EmiApi;
 import net.minecraftforge.api.distmarker.Dist;
@@ -63,6 +64,7 @@ public class ClientEvents {
 
     @SubscribeEvent
     public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
+        ForestAutoSaver.cancelPending();
         ForestSaveManager.saveTrees();
         System.out.println("[EMI Forest] Arboles guardados al salir del mundo/servidor.");
     }

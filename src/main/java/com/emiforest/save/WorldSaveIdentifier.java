@@ -6,6 +6,13 @@ import net.minecraft.world.level.storage.LevelResource;
 
 public class WorldSaveIdentifier {
 
+    public static boolean hasValidWorld() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.hasSingleplayerServer() && mc.getSingleplayerServer() != null) return true;
+        ServerData server = mc.getCurrentServer();
+        return server != null && server.ip != null;
+    }
+
     public static String getCurrentId() {
         Minecraft mc = Minecraft.getInstance();
 
