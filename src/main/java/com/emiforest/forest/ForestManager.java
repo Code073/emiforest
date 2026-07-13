@@ -1,5 +1,6 @@
 package com.emiforest.forest;
 
+import com.emiforest.save.ForestSaveManager;
 import dev.emi.emi.bom.BoM;
 import dev.emi.emi.bom.MaterialTree;
 import dev.emi.emi.screen.BoMScreen;
@@ -17,6 +18,7 @@ public class ForestManager {
         TREES.add(tree);
         CUSTOM_NAMES.add(null);
         currentIndex = TREES.size() - 1;
+        ForestSaveManager.saveTrees();
     }
     public static List<MaterialTree> getTrees() {
         return TREES;
@@ -33,6 +35,7 @@ public class ForestManager {
         if (index >= 0 && index < CUSTOM_NAMES.size()) {
             CUSTOM_NAMES.set(index, name);
         }
+        ForestSaveManager.saveTrees();
     }
     public static void select(int index) {
         if (index < 0 || index >= TREES.size()) {
@@ -58,6 +61,7 @@ public class ForestManager {
             BoM.tree = TREES.get(currentIndex);
         }
         refreshBoM();
+        ForestSaveManager.saveTrees();
     }
     public static void deleteAll() {
         TREES.clear();
@@ -65,6 +69,7 @@ public class ForestManager {
         currentIndex = -1;
         BoM.tree = null;
         refreshBoM();
+        ForestSaveManager.saveTrees();
     }
     public static void next() {
         if (TREES.isEmpty()) return;
@@ -85,6 +90,8 @@ public class ForestManager {
             select(newIndex);
         }
         refreshBoM();
+        ForestSaveManager.saveTrees();
+
     }
     public static void refreshBoM() {
         Minecraft client = Minecraft.getInstance();
@@ -93,4 +100,11 @@ public class ForestManager {
         }
     }
 
+    // En ForestManager
+    public static String getCustomName(int index) {
+        if (index >= 0 && index < CUSTOM_NAMES.size()) {
+            return CUSTOM_NAMES.get(index);
+        }
+        return null;
+    }
 }
