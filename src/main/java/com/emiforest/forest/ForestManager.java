@@ -1,5 +1,6 @@
 package com.emiforest.forest;
 
+import com.emiforest.save.ForestAutoSaver;
 import com.emiforest.save.ForestSaveManager;
 import dev.emi.emi.bom.BoM;
 import dev.emi.emi.bom.MaterialTree;
@@ -14,11 +15,18 @@ public class ForestManager {
     private static final List<MaterialTree> TREES = new ArrayList<>();
     private static int currentIndex = -1;
     private static final List<String> CUSTOM_NAMES = new ArrayList<>();
+    private static boolean bulkLoading = false; // NUEVO
+
+    public static void setBulkLoading(boolean value) {
+        bulkLoading = value;
+    }
     public static void addTree(MaterialTree tree) {
         TREES.add(tree);
         CUSTOM_NAMES.add(null);
         currentIndex = TREES.size() - 1;
-        ForestSaveManager.saveTrees();
+        if (!bulkLoading) {
+            ForestSaveManager.saveTrees();
+        }
     }
     public static List<MaterialTree> getTrees() {
         return TREES;
@@ -35,7 +43,9 @@ public class ForestManager {
         if (index >= 0 && index < CUSTOM_NAMES.size()) {
             CUSTOM_NAMES.set(index, name);
         }
-        ForestSaveManager.saveTrees();
+        if (!bulkLoading) {
+            ForestSaveManager.saveTrees();
+        }
     }
     public static void select(int index) {
         if (index < 0 || index >= TREES.size()) {
@@ -43,6 +53,7 @@ public class ForestManager {
         }
         currentIndex = index;
         BoM.tree = TREES.get(currentIndex);
+        ForestAutoSaver.resync(); // evita guardado falso al cambiar de árbol
     }
     public static void delete(int index) {
         if (index < 0 || index >= TREES.size()) return;
@@ -61,7 +72,9 @@ public class ForestManager {
             BoM.tree = TREES.get(currentIndex);
         }
         refreshBoM();
-        ForestSaveManager.saveTrees();
+        if (!bulkLoading) {
+            ForestSaveManager.saveTrees();
+        }
     }
     public static void deleteAll() {
         TREES.clear();
@@ -69,8 +82,11 @@ public class ForestManager {
         currentIndex = -1;
         BoM.tree = null;
         refreshBoM();
-        ForestSaveManager.saveTrees();
+        if (!bulkLoading) {
+            ForestSaveManager.saveTrees();
+        }
     }
+
     public static void next() {
         if (TREES.isEmpty()) return;
         select((currentIndex + 1) % TREES.size());
@@ -90,7 +106,7 @@ public class ForestManager {
             select(newIndex);
         }
         refreshBoM();
-        ForestSaveManager.saveTrees();
+
 
     }
     public static void refreshBoM() {

@@ -689,9 +689,4 @@ public abstract class BoMScreenMixin {
                 + clip + emiforest$editingText.substring(emiforest$cursorPos);
         emiforest$cursorPos += clip.length();
     }
-    @Inject(method = "recalculateTree", at = @At("TAIL"), remap = false)
-    private void emiforest$onRecalculateTree(CallbackInfo ci) {
-        com.emiforest.save.ForestAutoSaver.scheduleSave();
-    }
-
 }

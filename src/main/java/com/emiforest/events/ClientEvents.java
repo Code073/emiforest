@@ -1,8 +1,9 @@
 package com.emiforest.events;
 
+import com.emiforest.forest.ForestManager;
 import com.emiforest.save.ForestAutoSaver;
 import com.emiforest.save.ForestSaveManager;
-import dev.emi.emi.api.EmiApi;
+import dev.emi.emi.runtime.EmiReloadManager;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.event.TickEvent;
@@ -14,58 +15,48 @@ public class ClientEvents {
 
     private static boolean pendingLoad = false;
     private static int waitTicks = 0;
-    private static int lastRecipeCount = -1;
-    private static int stableTicks = 0;
+    private static final int MAX_WAIT_TICKS = 1200; // 60s como margen de seguridad absoluto
 
     @SubscribeEvent
     public static void onLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
         pendingLoad = true;
         waitTicks = 0;
-        lastRecipeCount = -1;
-        stableTicks = 0;
     }
 
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || !pendingLoad) return;
+        if (event.phase != TickEvent.Phase.END) return;
 
-        waitTicks++;
+        if (pendingLoad) {
+            waitTicks++;
 
-        int currentCount = getRecipeCountSafe();
+            boolean emiReady = EmiReloadManager.isLoaded();
+            boolean safetyTimeout = waitTicks > MAX_WAIT_TICKS;
 
-        // Consideramos "listo" cuando el número de recetas deja de cambiar
-        // durante varios ticks seguidos (EMI ya terminó de indexar)
-        if (currentCount == lastRecipeCount && currentCount > 0) {
-            stableTicks++;
-        } else {
-            stableTicks = 0;
+            if (emiReady || safetyTimeout) {
+                pendingLoad = false;
+                String reason = emiReady ? "EMI reporto carga completa" : "timeout de seguridad tras " + waitTicks + " ticks";
+                System.out.println("[EMI Forest] Cargando (" + reason + ")");
+
+                boolean success = ForestSaveManager.loadAndPopulate();
+                if (success) {
+                    ForestAutoSaver.resync();
+                    ForestAutoSaver.loadCompletedSuccessfully = true;
+                } else {
+                    System.err.println("[EMI Forest] Carga fallida, reintentando...");
+                    pendingLoad = true;
+                    waitTicks = 0; // reintenta desde cero, EmiReloadManager podría recargar de nuevo
+                }
+            }
+            return;
         }
-        lastRecipeCount = currentCount;
 
-        boolean stable = stableTicks >= 5; // 5 ticks iguales seguidos = estable
-        boolean timeout = waitTicks > 200; // margen de 10s por si acaso
-
-        if (stable || timeout) {
-            pendingLoad = false;
-            System.out.println("[EMI Forest] Cargando tras " + waitTicks + " ticks. Recetas EMI detectadas: " + currentCount + (timeout ? " (timeout)" : " (estable)"));
-            ForestSaveManager.loadAndPopulate();
-        }
-    }
-
-    private static int getRecipeCountSafe() {
-        try {
-            var manager = EmiApi.getRecipeManager();
-            if (manager == null) return 0;
-            return manager.getRecipes().size();
-        } catch (Exception e) {
-            return 0;
-        }
+        ForestAutoSaver.checkForChanges();
     }
 
     @SubscribeEvent
     public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
-        ForestAutoSaver.cancelPending();
-        ForestSaveManager.saveTrees();
-        System.out.println("[EMI Forest] Arboles guardados al salir del mundo/servidor.");
+        System.out.println("[EMI Forest] onLoggingOut disparado. No se hace guardado adicional.");
+        ForestAutoSaver.loadCompletedSuccessfully = false;
     }
 }
