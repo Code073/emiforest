@@ -25,19 +25,23 @@ public class ForestSaveManager {
     }
 
     public static void saveTrees() {
-        System.out.println("=== [EMI Forest] saveTrees() INVOCADO ===");
-        new Exception("Stacktrace de origen").printStackTrace();
+        saveTrees(false);
+    }
 
+    public static void saveTrees(boolean force) {
         List<SavedTree> toSave = new ArrayList<>();
         List<MaterialTree> trees = ForestManager.getTrees();
 
-        // Guardia: si no hay árboles en memoria pero el archivo actual SI tiene árboles guardados,
-        // es sospechoso (posible evento fantasma o timing raro) — no sobrescribimos a ciegas.
-        if (trees.isEmpty()) {
+        // Safety guard: if memory has no trees but the file on disk does,
+        // something is off (e.g. an event firing before state is ready) —
+        // don't blindly overwrite existing data with an empty list, UNLESS
+        // this is an intentional deletion (force = true).
+        if (trees.isEmpty() && !force) {
             File existing = getFile();
             List<SavedTree> onDisk = ForestSerializer.load(existing);
             if (!onDisk.isEmpty()) {
-                System.err.println("[EMI Forest] saveTrees() llamado con 0 árboles en memoria, pero el archivo tiene " + onDisk.size() + ". Abortando guardado para evitar perdida de datos.");
+                System.err.println("[EMI Forest] saveTrees() called with 0 trees in memory, but file has "
+                        + onDisk.size() + ". Aborting to avoid data loss.");
                 return;
             }
         }
@@ -51,18 +55,13 @@ public class ForestSaveManager {
             String customName = ForestManager.getCustomName(i);
 
             List<SavedTree.SavedResolution> resolutions = new ArrayList<>();
-
-            System.out.println("[DEBUG] Arbol '" + recipeId + "' -> resolutions.size() = " + tree.resolutions.size());
             for (Map.Entry<EmiIngredient, EmiRecipe> entry : tree.resolutions.entrySet()) {
                 EmiRecipe res = entry.getValue();
-                System.out.println("[DEBUG]   ingrediente=" + entry.getKey() + " receta=" + res + " id=" + (res != null ? res.getId() : "NULL"));
-            }
+                if (res == null || res.getId() == null) continue;
 
-            for (Map.Entry<EmiIngredient, EmiRecipe> entry : tree.resolutions.entrySet()) {
-                EmiRecipe res = entry.getValue();
-                if (res == null || res.getId() == null) continue; // resoluciones sin id (ej: EmiResolutionRecipe) no se pueden restaurar por id
                 JsonElement ingredientJson = EmiIngredientSerializer.getSerialized(entry.getKey());
                 if (ingredientJson == null) continue;
+
                 resolutions.add(new SavedTree.SavedResolution(ingredientJson, res.getId().toString()));
             }
 
@@ -70,7 +69,6 @@ public class ForestSaveManager {
         }
 
         ForestSerializer.save(getFile(), toSave);
-        System.out.println("[EMI Forest] Guardados " + toSave.size() + " arboles en " + getFile().getAbsolutePath());
     }
 
     /**

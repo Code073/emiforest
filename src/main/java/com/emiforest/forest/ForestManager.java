@@ -73,7 +73,7 @@ public class ForestManager {
         }
         refreshBoM();
         if (!bulkLoading) {
-            ForestSaveManager.saveTrees();
+            ForestSaveManager.saveTrees(true); // intentional deletion, allow saving an empty list
         }
     }
     public static void deleteAll() {
@@ -83,7 +83,7 @@ public class ForestManager {
         BoM.tree = null;
         refreshBoM();
         if (!bulkLoading) {
-            ForestSaveManager.saveTrees();
+            ForestSaveManager.saveTrees(true);
         }
     }
 
@@ -106,8 +106,6 @@ public class ForestManager {
             select(newIndex);
         }
         refreshBoM();
-
-
     }
     public static void refreshBoM() {
         Minecraft client = Minecraft.getInstance();
